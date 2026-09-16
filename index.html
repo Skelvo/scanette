@@ -72,7 +72,7 @@
   }
 
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
-  html,body{height:100%; touch-action:pan-x pan-y;}
+  html,body{height:100%; overflow-x:hidden; touch-action:pan-y;}
   body{
     margin:0; background:var(--bg); color:var(--text);
     font-family:var(--font-display);
@@ -206,7 +206,7 @@
   .qty-stepper{ display:flex; align-items:center; gap:0; background:var(--surface-2); border:1px solid var(--line); border-radius:9px; flex-shrink:0; }
   .qty-stepper button{ width:36px; height:36px; background:transparent; border:none; color:var(--text); font-size:19px; }
   .qty-stepper .q{ font-family:var(--font-mono); font-weight:800; font-size:20px; min-width:34px; text-align:center; }
-  .price-tag{ display:block; margin:3px 0; padding:2px 8px; border:1px dashed var(--line); border-radius:10px; font-size:10.5px; color:var(--accent); background:none; font-family:var(--font-mono); width:fit-content; }
+  .price-tag{ display:block; margin:3px 0; padding:2px 8px; border:1px dashed var(--line); border-radius:10px; font-size:10.5px; color:var(--accent); background:none; font-family:var(--font-mono); max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; box-sizing:border-box; }
   .price-tag.set{ border-style:solid; border-color:var(--line); color:var(--text-dim); }
   .row-icon-btn{ background:none; border:none; color:var(--text-faint); font-size:15px; padding:6px; flex-shrink:0; }
   .row-icon-btn:active{ color:var(--text); }
