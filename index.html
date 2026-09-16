@@ -472,7 +472,7 @@
         <p><b>Catalogue</b> : voir, renommer, supprimer ou ajouter à la main toutes les correspondances code-barres → référence connues sur cet appareil.</p>
         <p><b>Historique</b> : chaque "Vider" garde une sauvegarde datée, consultable, exportable en CSV, ou restaurable sur la feuille en cours.</p>
         <p><b>Prénom</b> : sert à savoir qui a compté quoi (affiché sur les lignes et dans les exports), et à voir qui d'autre a l'app ouverte en même temps. <button id="btnChangeUserName" style="display:inline; background:none; border:none; padding:0; margin:0; font-size:12.5px; font-family:inherit; color:var(--accent); font-weight:700;">Ton prénom : <span id="userNameDisplay">(non défini)</span> — toucher pour changer</button></p>
-        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v18 — 16/09 23:05</b></p>
+        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v19 — 16/09 23:20</b></p>
       </div>
     </div>
   </main>
@@ -899,6 +899,14 @@
     if(pinBuffer.length === 4){ setTimeout(handlePinComplete, 150); }
   });
 
+  // Demande le prénom avant d'entrer dans l'app si on ne le connaît pas
+  // encore — que ce soit à la toute première configuration du code, ou à un
+  // déverrouillage normal (cas d'un code déjà configuré avant l'ajout de
+  // cette fonctionnalité, comme sur cet appareil).
+  function unlockAskingNameIfNeeded(){
+    if(!currentUser) setTimeout(function(){ askUserName(unlock); }, 300);
+    else unlock();
+  }
   function handlePinComplete(){
     if(settingPin){
       if(!firstPinEntry){
@@ -910,12 +918,7 @@
       }
       if(firstPinEntry === pinBuffer){
         try{ localStorage.setItem(PIN_KEY, pinBuffer); }catch(e){}
-        // On demande le prénom ICI, encore sur l'écran du code : le
-        // demander après unlock() faisait apparaître la question flottant
-        // sur l'écran principal déjà affiché, ce qui déroutait plus qu'autre
-        // chose.
-        if(!currentUser) setTimeout(function(){ askUserName(unlock); }, 300);
-        else unlock();
+        unlockAskingNameIfNeeded();
       } else {
         firstPinEntry = '';
         pinBuffer = '';
@@ -925,7 +928,7 @@
       }
     } else {
       if(pinBuffer === pinStored){
-        unlock();
+        unlockAskingNameIfNeeded();
       } else {
         pinBuffer = '';
         renderPinDots();
