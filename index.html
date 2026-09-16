@@ -211,6 +211,11 @@
   .row-icon-btn{ background:none; border:none; color:var(--text-faint); font-size:15px; padding:6px; flex-shrink:0; }
   .row-icon-btn:active{ color:var(--text); }
 
+  .catalog-row{ display:flex; align-items:center; gap:8px; padding:10px 2px; border-bottom:1px solid var(--line); }
+  .catalog-row .ref-wrap{ flex:1; min-width:0; }
+  .catalog-row .ref-wrap .ref{ font-family:var(--font-mono); font-weight:700; font-size:15px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .catalog-row .ref-wrap .code{ font-size:11px; color:var(--text-faint); margin-top:1px; }
+
   .empty-state{ text-align:center; padding:40px 20px; color:var(--text-faint); }
   .empty-state .big{ font-size:30px; margin-bottom:8px; }
   .empty-state p{ font-size:13px; line-height:1.6; margin:4px 0 0; }
@@ -347,6 +352,7 @@
       <div class="brand"><span class="mark">📦</span> Scanette</div>
       <div class="head-actions">
         <div class="sync-dot off" id="syncDot" title="Catalogue partagé : hors ligne">☁️</div>
+        <button class="icon-btn" id="catalogBtn" title="Catalogue">📚</button>
         <button class="icon-btn" id="themeBtn" title="Thème">🌓</button>
         <button class="icon-btn" id="lockBtn" title="Verrouiller">⏻</button>
       </div>
@@ -405,6 +411,7 @@
         <p><b>✎ / ✕</b> : renommer ou supprimer une référence directement depuis la ligne.</p>
         <p><b>↩ Annuler</b> apparaît après chaque scan ou changement de quantité, pour revenir en arrière en un geste.</p>
         <p><b>☁️</b> : le catalogue code-barres → référence est partagé avec toute l'équipe en temps réel. Dès que quelqu'un identifie un code, tout le monde le voit. Les quantités et fournisseurs restent, eux, propres à cet appareil.</p>
+        <p><b>📚 Catalogue</b> : voir, renommer, supprimer ou ajouter à la main toutes les correspondances code-barres → référence connues sur cet appareil.</p>
       </div>
     </div>
   </main>
@@ -503,6 +510,18 @@
     <input class="field" id="photoRefInput" placeholder="Référence">
     <button class="btn-primary" id="btnAddPhotoRef">➕ Ajouter et continuer</button>
     <button class="btn-secondary" id="btnDonePhotoRef">Terminer</button>
+  </div>
+</div>
+
+<!-- Catalogue modal -->
+<div class="modal-backdrop" id="catalogModal">
+  <div class="sheet" style="max-height:90vh;">
+    <h2>Catalogue</h2>
+    <p class="sub">Toutes les correspondances code-barres → référence connues sur cet appareil.</p>
+    <input class="field" id="catalogFilter" placeholder="🔍 Filtrer par code ou référence...">
+    <div id="catalogList"></div>
+    <button class="btn-secondary" id="btnAddCatalogEntry">➕ Ajouter une correspondance</button>
+    <button class="btn-secondary" id="btnCloseCatalog">Fermer</button>
   </div>
 </div>
 
@@ -1741,6 +1760,86 @@
       document.documentElement.style.setProperty('--kb-offset', kb + 'px');
     });
   }
+
+  /* ================= Catalogue (voir/modifier toutes les correspondances) ================= */
+  var catalogFilterText = '';
+  function renderCatalogList(){
+    var wrap = document.getElementById('catalogList');
+    var q = catalogFilterText.trim().toLowerCase();
+    var codes = Object.keys(catalog).filter(function(c){
+      return !q || c.toLowerCase().indexOf(q) !== -1 || catalog[c].toLowerCase().indexOf(q) !== -1;
+    }).sort(function(a, b){ return naturalCompare(catalog[a], catalog[b]); });
+    if(codes.length === 0){
+      wrap.innerHTML = '<div class="empty-state"><p>' + (q
+        ? 'Aucune correspondance ne contient "' + escapeHtml(catalogFilterText) + '".'
+        : 'Catalogue vide — scanne un code inconnu pour commencer à le remplir.') + '</p></div>';
+      return;
+    }
+    var html = '';
+    codes.forEach(function(code){
+      html += '<div class="catalog-row" data-code="' + escapeHtml(code) + '">';
+      html += '<div class="ref-wrap"><div class="ref">' + escapeHtml(catalog[code]) + '</div><div class="code">' + escapeHtml(code) + '</div></div>';
+      html += '<button class="row-icon-btn" data-role="editCatalog" title="Renommer">✎</button>';
+      html += '<button class="row-icon-btn" data-role="deleteCatalog" title="Supprimer">✕</button>';
+      html += '</div>';
+    });
+    wrap.innerHTML = html;
+  }
+  document.getElementById('catalogFilter').addEventListener('input', function(){
+    catalogFilterText = this.value;
+    renderCatalogList();
+  });
+  document.getElementById('catalogList').addEventListener('click', function(e){
+    var row = e.target.closest('.catalog-row'); if(!row) return;
+    var code = row.getAttribute('data-code');
+    var role = e.target.closest('[data-role]');
+    role = role ? role.getAttribute('data-role') : null;
+    if(role === 'editCatalog'){
+      askInput('Renommer la référence du code ' + code, catalog[code], 'text').then(function(val){
+        val = normalizeRef(val);
+        if(!val) return;
+        catalog[code] = val;
+        saveCatalog();
+        writeCatalogEntry(code, val);
+        renderCatalogList();
+        toast('Modifié');
+      });
+      return;
+    }
+    if(role === 'deleteCatalog'){
+      openConfirm('Supprimer cette correspondance ?', 'Le code ' + code + ' ne sera plus reconnu automatiquement au scan. Les articles déjà comptés dans la feuille ne sont pas touchés.', function(){
+        delete catalog[code];
+        saveCatalog();
+        renderCatalogList();
+        toast('Supprimé');
+      });
+      return;
+    }
+  });
+  document.getElementById('btnAddCatalogEntry').addEventListener('click', function(){
+    askInput('Code-barres', '', 'numeric').then(function(code){
+      code = code == null ? '' : code.trim();
+      if(!code) return;
+      askInput('Référence pour le code ' + code, catalog[code] || '', 'text').then(function(ref){
+        ref = normalizeRef(ref);
+        if(!ref) return;
+        catalog[code] = ref;
+        saveCatalog();
+        writeCatalogEntry(code, ref);
+        renderCatalogList();
+        toast('Ajouté au catalogue');
+      });
+    });
+  });
+  document.getElementById('btnCloseCatalog').addEventListener('click', function(){
+    document.getElementById('catalogModal').classList.remove('show');
+  });
+  document.getElementById('catalogBtn').addEventListener('click', function(){
+    catalogFilterText = '';
+    document.getElementById('catalogFilter').value = '';
+    renderCatalogList();
+    document.getElementById('catalogModal').classList.add('show');
+  });
 
   /* ================= Init ================= */
   renderPinDots();
