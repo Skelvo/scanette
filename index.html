@@ -241,10 +241,12 @@
   }
   .toolbar-inner{ max-width:560px; margin:0 auto; }
   .tb-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:8px; }
+  .tb-grid.tb-grid-5{ grid-template-columns:repeat(5,1fr); gap:6px; }
   .tb-grid button{
     background:var(--surface-2); border:1px solid var(--line); color:var(--text); border-radius:var(--radius-sm);
     padding:10px 4px; font-size:11.5px; display:flex; flex-direction:column; align-items:center; gap:4px;
   }
+  .tb-grid-5 button{ font-size:10px; padding:9px 2px; }
   .tb-grid button .ic{ font-size:15px; }
   .selection-bar{
     display:none; align-items:center; gap:10px; background:var(--accent-dim); border:1px solid var(--accent);
@@ -417,9 +419,10 @@
 
   <div class="toolbar">
     <div class="toolbar-inner">
-      <div class="tb-grid">
+      <div class="tb-grid tb-grid-5">
         <button id="btnPDF"><span class="ic">🖨</span>PDF</button>
         <button id="btnCSV"><span class="ic">📄</span>CSV</button>
+        <button id="btnStar6000"><span class="ic">📤</span>Star6000</button>
         <button id="btnSync"><span class="ic">🔄</span>Sync</button>
         <button id="btnClear"><span class="ic">🗑</span>Vider</button>
       </div>
@@ -1583,21 +1586,42 @@
     }
   }
 
+  function csvRow(values){
+    return values.map(function(v){ return '"' + String(v).replace(/"/g,'""') + '"'; }).join(';');
+  }
+
   document.getElementById('btnCSV').addEventListener('click', function(){
     if(totalRefs() === 0){ toast('Rien à exporter'); return; }
-    var lines = [['Fournisseur','Référence','Code','Quantité','Prix unitaire','Total'].join(';')];
+    var lines = [csvRow(['Fournisseur','Référence','Code','Quantité','Prix unitaire','Total'])];
     state.suppliers.forEach(function(s){
       s.items.forEach(function(it){
         var pu = it.price != null ? it.price.toFixed(2) : '';
         var tot = it.price != null ? (it.price * it.qty).toFixed(2) : '';
-        lines.push([s.name, it.ref, it.code||'', it.qty, pu, tot].map(function(v){
-          return '"' + String(v).replace(/"/g,'""') + '"';
-        }).join(';'));
+        lines.push(csvRow([s.name, it.ref, it.code||'', it.qty, pu, tot]));
       });
     });
     var blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv' });
     var d = new Date();
     var fname = 'scanette_' + d.toISOString().slice(0,10) + '.csv';
+    downloadFile(fname, blob);
+  });
+
+  /* ================= Export Star6000 ================= */
+  // Format exact attendu par leur import : ";" en séparateur, tout entre
+  // guillemets, colonnes Fournisseur/Reference/Quantite/Prix (sans accents,
+  // sans code-barres ni total — juste ce que Star6000 lit).
+  document.getElementById('btnStar6000').addEventListener('click', function(){
+    if(totalRefs() === 0){ toast('Rien à exporter'); return; }
+    var lines = [csvRow(['Fournisseur','Reference','Quantite','Prix'])];
+    state.suppliers.forEach(function(s){
+      s.items.forEach(function(it){
+        var prix = it.price != null ? it.price.toFixed(2).replace('.', ',') : '';
+        lines.push(csvRow([s.name, it.ref, it.qty, prix]));
+      });
+    });
+    var blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv' });
+    var d = new Date();
+    var fname = 'inventaire_' + d.toISOString().slice(0,10) + '.csv';
     downloadFile(fname, blob);
   });
 
