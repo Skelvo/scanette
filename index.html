@@ -412,6 +412,7 @@
       <div><span class="n" id="totalQty">0</span> <span class="lbl">pièces scannées</span></div>
       <div id="valueStat" style="display:none;"><span class="n" id="totalValueEl">0 €</span> <span class="lbl">valeur stock</span></div>
     </div>
+    <div id="presenceRow" style="display:none; font-size:11.5px; color:var(--success); margin-top:5px;"></div>
   </header>
 
   <main>
@@ -466,7 +467,8 @@
         <p><b>Synchro</b> : le catalogue code-barres → référence est partagé avec toute l'équipe en temps réel. Dès que quelqu'un identifie un code, tout le monde le voit. Les quantités et fournisseurs restent, eux, propres à cet appareil.</p>
         <p><b>Catalogue</b> : voir, renommer, supprimer ou ajouter à la main toutes les correspondances code-barres → référence connues sur cet appareil.</p>
         <p><b>Historique</b> : chaque "Vider" garde une sauvegarde datée, consultable, exportable en CSV, ou restaurable sur la feuille en cours.</p>
-        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v16 — 16/09 18:35</b></p>
+        <p><b>Prénom</b> : sert à savoir qui a compté quoi (affiché sur les lignes et dans les exports), et à voir qui d'autre a l'app ouverte en même temps. <button id="btnChangeUserName" style="display:inline; background:none; border:none; padding:0; margin:0; font-size:12.5px; font-family:inherit; color:var(--accent); font-weight:700;">Ton prénom : <span id="userNameDisplay">(non défini)</span> — toucher pour changer</button></p>
+        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v17 — 16/09 22:30</b></p>
       </div>
     </div>
   </main>
@@ -640,6 +642,7 @@
   var THEME_KEY = 'scanette_theme_v1';
   var SORT_KEY = 'scanette_sort_v1';
   var HISTORY_KEY = 'scanette_history_v1';
+  var USERNAME_KEY = 'scanette_username_v1';
 
   var state = loadState();
   var catalog = loadCatalog(); // { code: refName } — local cache; source of truth is the shared db when connected
@@ -648,6 +651,29 @@
   var listFilterText = '';
   var sortMode = 'scan';
   try{ sortMode = localStorage.getItem(SORT_KEY) || 'scan'; }catch(e){}
+
+  // Prénom propre à cet appareil : sert juste à savoir qui a compté quoi
+  // (affiché sur chaque ligne, dans les exports, et pour la présence en
+  // direct) — aucun compte, aucun mot de passe, juste un repère d'équipe.
+  var currentUser = '';
+  try{ currentUser = localStorage.getItem(USERNAME_KEY) || ''; }catch(e){}
+  function setCurrentUser(name){
+    currentUser = normalizeRef(name);
+    try{ localStorage.setItem(USERNAME_KEY, currentUser); }catch(e){}
+    renderUserName();
+    if(presenceChannel) presenceChannel.track({ name: currentUser || 'Collègue' });
+  }
+  function renderUserName(){
+    var el = document.getElementById('userNameDisplay');
+    if(el) el.textContent = currentUser || '(non défini)';
+  }
+  function askUserName(){
+    askInput('Ton prénom (pour savoir qui a compté quoi)', currentUser, 'text').then(function(val){
+      if(val === null) return;
+      setCurrentUser(val);
+      toast(currentUser ? 'Prénom enregistré : ' + currentUser : 'Prénom effacé');
+    });
+  }
 
   // Tri "naturel" : compare les segments numériques comme des nombres, pas
   // comme du texte, pour que "NTH2" passe bien avant "NTH10".
@@ -789,7 +815,36 @@
       })
       .subscribe(function(status){
         setSyncIndicator(status === 'SUBSCRIBED');
+        if(status === 'SUBSCRIBED') initPresence();
       });
+  }
+
+  /* ================= Présence : qui d'autre a l'app ouverte en ce moment ================= */
+  var presenceChannel = null;
+  var presenceSelfId = uid();
+  function renderPresence(names){
+    var el = document.getElementById('presenceRow');
+    if(!el) return;
+    if(!names || names.length === 0){ el.style.display = 'none'; return; }
+    el.style.display = '';
+    el.textContent = '● En ligne aussi : ' + names.join(', ');
+  }
+  function initPresence(){
+    if(!db || presenceChannel) return;
+    presenceChannel = db.channel('presence-scanette', { config: { presence: { key: presenceSelfId } } });
+    presenceChannel.on('presence', { event: 'sync' }, function(){
+      var pstate = presenceChannel.presenceState();
+      var names = [];
+      Object.keys(pstate).forEach(function(key){
+        if(key === presenceSelfId) return;
+        var metas = pstate[key];
+        if(metas && metas[0] && metas[0].name) names.push(metas[0].name);
+      });
+      renderPresence(names);
+    });
+    presenceChannel.subscribe(function(status){
+      if(status === 'SUBSCRIBED') presenceChannel.track({ name: currentUser || 'Collègue' });
+    });
   }
 
   function writeCatalogEntry(code, refName){
@@ -850,6 +905,7 @@
       if(firstPinEntry === pinBuffer){
         try{ localStorage.setItem(PIN_KEY, pinBuffer); }catch(e){}
         unlock();
+        if(!currentUser) setTimeout(askUserName, 400);
       } else {
         firstPinEntry = '';
         pinBuffer = '';
@@ -879,6 +935,7 @@
     document.getElementById('app').style.flexDirection = 'column';
     renderAll();
   }
+  document.getElementById('btnChangeUserName').addEventListener('click', askUserName);
   document.getElementById('lockBtn').addEventListener('click', function(){
     $app.style.display = 'none';
     $lock.style.display = 'flex';
@@ -988,7 +1045,7 @@
         html += '<div class="chk'+(checked?' on':'')+'" data-role="chk">'+(checked?'✓':'')+'</div>';
         html += '<div class="ref"><div class="r1">'+escapeHtml(it.ref)+'</div>';
         html += '<button class="price-tag'+(it.price!=null?' set':'')+'" data-role="price">'+escapeHtml(priceLabel)+'</button>';
-        html += '<div class="r2">'+escapeHtml(it.code||'saisie manuelle')+'</div></div>';
+        html += '<div class="r2">'+escapeHtml(it.code||'saisie manuelle')+(it.by?' · '+escapeHtml(it.by):'')+'</div></div>';
         html += '<div class="qty-stepper">';
         html += '<button data-role="qdown">−</button>';
         html += '<div class="q" data-role="qval">'+it.qty+'</div>';
@@ -1047,11 +1104,12 @@
     if(existing){
       prevQty = existing.qty;
       existing.qty += scanStep;
+      existing.by = currentUser || existing.by || null;
       item = existing;
       wasNew = false;
     } else {
       prevQty = 0;
-      item = { id: uid(), ref: refName, code: code || null, qty: scanStep };
+      item = { id: uid(), ref: refName, code: code || null, qty: scanStep, by: currentUser || null };
       supplier.items.push(item);
       wasNew = true;
     }
@@ -1070,6 +1128,28 @@
     var known = findItemByCode(code);
     if(known || catalog[code]){
       var refName = known ? known.item.ref : catalog[code];
+      var activeId = state.activeSupplierId || '__none__';
+      // findItemByCode() cherche dans TOUS les fournisseurs : si ce code est
+      // déjà rangé ailleurs que le fournisseur actif, l'ajouter ici créerait
+      // silencieusement un doublon de la même pièce répartie sur deux
+      // fournisseurs. On prévient avant, plutôt que de laisser passer.
+      if(known && known.supplier.id !== activeId){
+        flashScan(true);
+        scanningPaused = true;
+        var activeName = getSupplier(activeId) ? getSupplier(activeId).name : 'Sans fournisseur';
+        openConfirm(
+          'Déjà compté ailleurs',
+          '"' + known.item.ref + '" est déjà enregistré chez "' + known.supplier.name + '" (qté ' + known.item.qty + '). Ajouter quand même sous "' + activeName + '" ?',
+          function(){
+            scanningPaused = false;
+            lastDetected = { code: null, t: 0 };
+            var res = addOrIncrement(refName, code);
+            showQuickQty(res.supplier.id, res.item.id);
+          },
+          function(){ scanningPaused = false; }
+        );
+        return;
+      }
       var res = addOrIncrement(refName, code);
       flashScan(true);
       showQuickQty(res.supplier.id, res.item.id);
@@ -1690,19 +1770,23 @@
   /* ================= Confirm modal ================= */
   var $confirmModal = document.getElementById('confirmModal');
   var confirmCb = null;
-  function openConfirm(title, sub, cb){
+  var confirmCancelCb = null;
+  function openConfirm(title, sub, cb, cancelCb){
     document.getElementById('confirmTitle').textContent = title;
     document.getElementById('confirmSub').textContent = sub;
     confirmCb = cb;
+    confirmCancelCb = cancelCb || null;
     $confirmModal.classList.add('show');
   }
   document.getElementById('confirmYes').addEventListener('click', function(){
     $confirmModal.classList.remove('show');
     if(confirmCb) confirmCb();
-    confirmCb = null;
+    confirmCb = null; confirmCancelCb = null;
   });
   document.getElementById('confirmNo').addEventListener('click', function(){
-    $confirmModal.classList.remove('show'); confirmCb = null;
+    $confirmModal.classList.remove('show');
+    if(confirmCancelCb) confirmCancelCb();
+    confirmCb = null; confirmCancelCb = null;
   });
 
   /* ================= Saisie générique (remplace prompt()) ================= */
@@ -1792,12 +1876,12 @@
 
   document.getElementById('btnCSV').addEventListener('click', function(){
     if(totalRefs() === 0){ toast('Rien à exporter'); return; }
-    var lines = [csvRow(['Fournisseur','Référence','Code','Quantité','Prix unitaire','Total'])];
+    var lines = [csvRow(['Fournisseur','Référence','Code','Quantité','Prix unitaire','Total','Compté par'])];
     state.suppliers.forEach(function(s){
       s.items.forEach(function(it){
         var pu = it.price != null ? it.price.toFixed(2) : '';
         var tot = it.price != null ? (it.price * it.qty).toFixed(2) : '';
-        lines.push(csvRow([s.name, it.ref, it.code||'', it.qty, pu, tot]));
+        lines.push(csvRow([s.name, it.ref, it.code||'', it.qty, pu, tot, it.by||'']));
       });
     });
     var blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv' });
@@ -1854,6 +1938,12 @@
         doc.text(String(it.qty), 165, y, { align: 'right' });
         if(it.price != null){ doc.text(formatPrice(it.price * it.qty), 196, y, { align: 'right' }); }
         y += 6 * refLines.length;
+        if(it.by){
+          doc.setFontSize(7.5); doc.setTextColor(140);
+          doc.text('compté par ' + it.by, 16, y);
+          doc.setFontSize(10); doc.setTextColor(0);
+          y += 4;
+        }
       });
       y += 4;
     });
@@ -2116,10 +2206,10 @@
     wrap.innerHTML = html;
   }
   function exportHistoryCsv(entry){
-    var lines = [csvRow(['Fournisseur','Référence','Code','Quantité'])];
+    var lines = [csvRow(['Fournisseur','Référence','Code','Quantité','Compté par'])];
     entry.suppliers.forEach(function(s){
       s.items.forEach(function(it){
-        lines.push(csvRow([s.name, it.ref, it.code||'', it.qty]));
+        lines.push(csvRow([s.name, it.ref, it.code||'', it.qty, it.by||'']));
       });
     });
     var blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv' });
@@ -2167,6 +2257,7 @@
   /* ================= Init ================= */
   renderPinDots();
   renderSortToggle();
+  renderUserName();
   initSharedCatalog();
 })();
 </script>
