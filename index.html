@@ -757,8 +757,12 @@
     document.getElementById('lockSub').textContent = "Choisis un code à 4 chiffres pour protéger ta feuille d'inventaire.";
   }
 
-  document.getElementById('keypad').addEventListener('click', function(e){
+  // pointerdown plutôt que click : plus fiable pour une saisie rapide et
+  // répétée (4 chiffres tapés vite à la suite), sans le délai/la synthèse
+  // parfois capricieuse des clics sur tactile.
+  document.getElementById('keypad').addEventListener('pointerdown', function(e){
     var btn = e.target.closest('button'); if(!btn) return;
+    e.preventDefault();
     var k = btn.getAttribute('data-k');
     if(k === 'theme'){ toggleTheme(); return; }
     if(k === 'back'){ pinBuffer = pinBuffer.slice(0,-1); renderPinDots(); return; }
