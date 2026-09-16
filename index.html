@@ -1,0 +1,1260 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Scanette</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@zxing/library@latest"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+  /* ---------- Tokens ---------- */
+  :root{
+    --bg:#12151a;
+    --surface:#1b1f26;
+    --surface-2:#242a33;
+    --surface-3:#2e3540;
+    --line:#333c48;
+    --text:#eef1f5;
+    --text-dim:#8d97a5;
+    --text-faint:#5c6672;
+    --accent:#ffb020;
+    --accent-ink:#1a1300;
+    --accent-dim:#4a380f;
+    --danger:#ff6b5e;
+    --danger-dim:#4a1f1a;
+    --success:#4fd67a;
+    --font-display:'Space Grotesk', system-ui, sans-serif;
+    --font-mono:'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
+    --radius:10px;
+    --radius-sm:6px;
+  }
+  @media (prefers-color-scheme: light){
+    :root:not([data-theme="dark"]){
+      --bg:#f3f1ec;
+      --surface:#ffffff;
+      --surface-2:#eceae3;
+      --surface-3:#e2ded4;
+      --line:#d8d3c6;
+      --text:#1c1a15;
+      --text-dim:#6b6558;
+      --text-faint:#a19a89;
+      --accent:#c67d0e;
+      --accent-ink:#fffaf0;
+      --accent-dim:#f2ddb4;
+      --danger:#c23b2e;
+      --danger-dim:#f4d9d5;
+      --success:#1f8a4c;
+    }
+  }
+  :root[data-theme="light"]{
+    --bg:#f3f1ec;
+    --surface:#ffffff;
+    --surface-2:#eceae3;
+    --surface-3:#e2ded4;
+    --line:#d8d3c6;
+    --text:#1c1a15;
+    --text-dim:#6b6558;
+    --text-faint:#a19a89;
+    --accent:#c67d0e;
+    --accent-ink:#fffaf0;
+    --accent-dim:#f2ddb4;
+    --danger:#c23b2e;
+    --danger-dim:#f4d9d5;
+    --success:#1f8a4c;
+  }
+  :root[data-theme="dark"]{
+    --bg:#12151a; --surface:#1b1f26; --surface-2:#242a33; --surface-3:#2e3540;
+    --line:#333c48; --text:#eef1f5; --text-dim:#8d97a5; --text-faint:#5c6672;
+    --accent:#ffb020; --accent-ink:#1a1300; --accent-dim:#4a380f;
+    --danger:#ff6b5e; --danger-dim:#4a1f1a; --success:#4fd67a;
+  }
+
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:var(--font-display);
+    overflow-x:hidden;
+    -webkit-font-smoothing:antialiased;
+  }
+  ::selection{background:var(--accent); color:var(--accent-ink);}
+  button{font-family:inherit;}
+  input{font-family:inherit;}
+
+  .app{ max-width:560px; margin:0 auto; min-height:100vh; display:flex; flex-direction:column; }
+
+  /* ---------- Lock screen ---------- */
+  #lock{
+    position:fixed; inset:0; z-index:200; background:var(--bg);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:22px; padding:24px; text-align:center;
+  }
+  #lock .mark{ font-size:44px; }
+  #lock h1{ font-size:22px; margin:0; letter-spacing:.2px; }
+  #lock p{ color:var(--text-dim); font-size:14px; margin:0; max-width:280px; line-height:1.5; }
+  .pin-dots{ display:flex; gap:14px; margin:6px 0; }
+  .pin-dots span{
+    width:14px; height:14px; border-radius:50%; border:2px solid var(--line);
+    background:transparent; transition:background .15s, border-color .15s;
+  }
+  .pin-dots span.filled{ background:var(--accent); border-color:var(--accent); }
+  .pin-dots.shake{ animation:shake .35s; }
+  @keyframes shake{ 0%,100%{transform:translateX(0);} 25%{transform:translateX(-8px);} 75%{transform:translateX(8px);} }
+  .keypad{ display:grid; grid-template-columns:repeat(3,64px); gap:14px; }
+  .keypad button{
+    width:64px; height:64px; border-radius:50%; border:1px solid var(--line);
+    background:var(--surface); color:var(--text); font-size:20px; font-family:var(--font-mono);
+  }
+  .keypad button:active{ background:var(--surface-2); }
+  .keypad button.wide{ border:none; background:transparent; color:var(--text-dim); font-family:var(--font-display); font-size:13px; }
+  #lockHint{ font-size:12px; color:var(--text-faint); min-height:16px; }
+
+  /* ---------- Header ---------- */
+  header{
+    position:sticky; top:0; z-index:20; background:var(--bg);
+    border-bottom:1px solid var(--line); padding:14px 16px 12px;
+  }
+  .brand-row{ display:flex; align-items:center; justify-content:space-between; }
+  .brand{ display:flex; align-items:center; gap:9px; font-size:19px; font-weight:700; }
+  .brand .mark{ font-size:20px; }
+  .head-actions{ display:flex; align-items:center; gap:6px; }
+  .icon-btn{
+    width:34px; height:34px; border-radius:50%; border:1px solid var(--line);
+    background:var(--surface); color:var(--text-dim); display:flex; align-items:center; justify-content:center;
+    font-size:15px; padding:0;
+  }
+  .sync-dot{
+    width:34px; height:34px; border-radius:50%; border:1px solid var(--line);
+    background:var(--surface); color:var(--text-dim); display:flex; align-items:center; justify-content:center;
+    font-size:14px;
+  }
+  .sync-dot.on{ border-color:var(--success); color:var(--success); }
+  .sync-dot.off{ border-color:var(--text-faint); color:var(--text-faint); }
+  .stat-row{ display:flex; align-items:baseline; gap:16px; margin-top:8px; }
+  .stat-row .n{ font-family:var(--font-mono); font-weight:700; font-size:15px; color:var(--accent); }
+  .stat-row .lbl{ font-size:12px; color:var(--text-dim); }
+
+  /* ---------- Main scroll area ---------- */
+  main{ flex:1; padding:14px 16px 130px; }
+
+  .panel{ background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:14px; margin-bottom:12px; }
+
+  .scan-row{ display:flex; gap:10px; align-items:stretch; }
+  .btn-scan{
+    flex:1; background:var(--accent); color:var(--accent-ink); border:none; border-radius:var(--radius);
+    font-family:var(--font-display); font-weight:700; font-size:15px; padding:16px 14px;
+    display:flex; align-items:center; justify-content:center; gap:8px;
+  }
+  .btn-scan:active{ opacity:.85; }
+  .stepper{
+    display:flex; align-items:center; background:var(--surface-2); border:1px solid var(--line);
+    border-radius:var(--radius); overflow:hidden; flex-shrink:0;
+  }
+  .stepper button{
+    width:38px; height:100%; background:transparent; border:none; color:var(--text); font-size:17px;
+  }
+  .stepper .val{ font-family:var(--font-mono); font-size:13px; padding:0 6px; color:var(--text-dim); min-width:34px; text-align:center; }
+
+  .row-btn2{ display:flex; gap:10px; margin-top:10px; }
+  .btn-ghost{
+    flex:1; background:var(--surface-2); border:1px solid var(--line); color:var(--text);
+    border-radius:var(--radius-sm); padding:11px 10px; font-size:12.5px; display:flex; align-items:center;
+    justify-content:center; gap:6px; text-align:center;
+  }
+  .btn-ghost:active{ background:var(--surface-3); }
+
+  .supplier-bar{ display:flex; align-items:center; gap:10px; margin-top:12px; }
+  .supplier-current{
+    flex:1; font-size:13px; color:var(--text-dim); background:var(--surface-2); border:1px dashed var(--line);
+    border-radius:var(--radius-sm); padding:10px 12px; display:flex; align-items:center; gap:8px;
+  }
+  .supplier-current.active{ color:var(--text); border-style:solid; border-color:var(--accent); background:var(--accent-dim); }
+  .btn-add-supplier{
+    background:none; border:1px solid var(--line); color:var(--accent); border-radius:var(--radius-sm);
+    padding:10px 13px; font-size:12.5px; font-weight:600; white-space:nowrap;
+  }
+
+  /* ---------- Groups / table ---------- */
+  .group{ margin-bottom:14px; }
+  .group-head{
+    display:flex; align-items:center; justify-content:space-between; padding:8px 4px;
+    border-bottom:1px solid var(--line); margin-bottom:2px;
+  }
+  .group-head .name{ font-size:12.5px; font-weight:700; letter-spacing:.3px; color:var(--text-dim); }
+  .group-head .count{ font-family:var(--font-mono); font-size:11.5px; color:var(--text-faint); }
+
+  .item-row{ display:flex; align-items:center; gap:10px; padding:10px 4px; border-bottom:1px solid var(--line); }
+  .item-row .chk{
+    width:19px; height:19px; border-radius:5px; border:1.5px solid var(--line); flex-shrink:0;
+    display:flex; align-items:center; justify-content:center; color:var(--accent-ink); font-size:12px; background:var(--surface);
+  }
+  .item-row .chk.on{ background:var(--accent); border-color:var(--accent); }
+  .item-row .ref{ flex:1; min-width:0; }
+  .item-row .ref .r1{ font-family:var(--font-mono); font-size:13.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .item-row .ref .r2{ font-size:10.5px; color:var(--text-faint); margin-top:2px; }
+  .qty-stepper{ display:flex; align-items:center; gap:0; background:var(--surface-2); border:1px solid var(--line); border-radius:8px; flex-shrink:0; }
+  .qty-stepper button{ width:30px; height:30px; background:transparent; border:none; color:var(--text); font-size:15px; }
+  .qty-stepper .q{ font-family:var(--font-mono); font-weight:700; font-size:13.5px; min-width:28px; text-align:center; }
+
+  .empty-state{ text-align:center; padding:40px 20px; color:var(--text-faint); }
+  .empty-state .big{ font-size:30px; margin-bottom:8px; }
+  .empty-state p{ font-size:13px; line-height:1.6; margin:4px 0 0; }
+
+  .help-toggle{ display:flex; align-items:center; justify-content:space-between; cursor:pointer; }
+  .help-toggle .q{ width:22px; height:22px; border-radius:50%; background:var(--surface-2); display:flex; align-items:center; justify-content:center; font-size:12px; color:var(--text-dim); }
+  .help-body{ font-size:12.5px; color:var(--text-dim); line-height:1.7; margin-top:10px; }
+  .help-body b{ color:var(--text); }
+
+  /* ---------- Bottom toolbar ---------- */
+  .toolbar{
+    position:fixed; left:0; right:0; bottom:0; z-index:30;
+    background:var(--surface); border-top:1px solid var(--line);
+    padding:10px 16px calc(10px + env(safe-area-inset-bottom));
+  }
+  .toolbar-inner{ max-width:560px; margin:0 auto; }
+  .tb-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:8px; }
+  .tb-grid button{
+    background:var(--surface-2); border:1px solid var(--line); color:var(--text); border-radius:var(--radius-sm);
+    padding:10px 4px; font-size:11.5px; display:flex; flex-direction:column; align-items:center; gap:4px;
+  }
+  .tb-grid button .ic{ font-size:15px; }
+  .selection-bar{
+    display:none; align-items:center; gap:10px; background:var(--accent-dim); border:1px solid var(--accent);
+    border-radius:var(--radius-sm); padding:9px 12px; margin-bottom:8px; font-size:12.5px;
+  }
+  .selection-bar.show{ display:flex; }
+  .selection-bar .n{ flex:1; font-weight:600; }
+  .selection-bar button{ background:var(--surface); border:1px solid var(--line); color:var(--text); border-radius:6px; padding:7px 10px; font-size:12px; }
+  .selection-bar button.danger{ color:var(--danger); border-color:var(--danger-dim); }
+
+  /* ---------- Modals ---------- */
+  .modal-backdrop{
+    position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:100; display:none;
+    align-items:flex-end; justify-content:center;
+  }
+  .modal-backdrop.show{ display:flex; }
+  .modal-backdrop.center{ align-items:center; padding:20px; }
+  .sheet{
+    width:100%; max-width:560px; background:var(--surface); border-radius:16px 16px 0 0;
+    padding:18px 18px calc(18px + env(safe-area-inset-bottom)); max-height:86vh; overflow-y:auto;
+  }
+  .modal-backdrop.center .sheet{ border-radius:16px; max-height:80vh; }
+  .sheet h2{ font-size:16px; margin:0 0 4px; }
+  .sheet .sub{ font-size:12.5px; color:var(--text-dim); margin:0 0 16px; }
+  .field{ width:100%; background:var(--surface-2); border:1px solid var(--line); color:var(--text); border-radius:var(--radius-sm); padding:12px 13px; font-size:14px; margin-bottom:10px; }
+  .field:focus{ outline:none; border-color:var(--accent); }
+  .btn-primary{ width:100%; background:var(--accent); color:var(--accent-ink); border:none; border-radius:var(--radius-sm); padding:13px; font-weight:700; font-size:14px; }
+  .btn-secondary{ width:100%; background:var(--surface-2); border:1px solid var(--line); color:var(--text); border-radius:var(--radius-sm); padding:12px; font-size:13.5px; margin-top:8px; }
+  .candidate-list{ display:flex; flex-direction:column; gap:6px; margin-bottom:12px; max-height:160px; overflow-y:auto; }
+  .candidate{ text-align:left; background:var(--surface-2); border:1px solid var(--line); color:var(--text); border-radius:8px; padding:10px 12px; font-family:var(--font-mono); font-size:13px; }
+  .candidate:active{ background:var(--surface-3); }
+  .move-list{ display:flex; flex-direction:column; gap:6px; margin-bottom:6px; max-height:220px; overflow-y:auto; }
+  .move-list button{ text-align:left; background:var(--surface-2); border:1px solid var(--line); color:var(--text); border-radius:8px; padding:11px 12px; font-size:13.5px; }
+
+  /* ---------- Scanner overlay ---------- */
+  #scanOverlay{ position:fixed; inset:0; z-index:150; background:#000; display:none; flex-direction:column; }
+  #scanOverlay.show{ display:flex; }
+  #interactive{ position:relative; flex:1; overflow:hidden; }
+  #interactive video, #interactive canvas{ position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); min-width:100%; min-height:100%; }
+  .scan-frame{
+    position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+    width:78%; max-width:340px; height:130px; border:2px solid var(--accent); border-radius:14px;
+    box-shadow:0 0 0 2000px rgba(0,0,0,.45); pointer-events:none;
+  }
+  .scan-top{ position:absolute; top:0; left:0; right:0; padding:16px; display:flex; justify-content:space-between; align-items:center; z-index:2; }
+  .scan-top .close{ width:38px; height:38px; border-radius:50%; background:rgba(0,0,0,.5); border:none; color:#fff; font-size:16px; }
+  .scan-top .right-group{ display:flex; align-items:center; gap:8px; }
+  .scan-top .torch{ width:38px; height:38px; border-radius:50%; background:rgba(0,0,0,.5); border:none; color:#fff; font-size:15px; display:none; }
+  .scan-top .torch.active{ background:var(--accent); color:var(--accent-ink); }
+  .scan-top .mode-label{ background:rgba(0,0,0,.5); color:#fff; padding:8px 14px; border-radius:20px; font-size:12.5px; font-family:var(--font-mono); }
+  .scan-bottom{ position:absolute; bottom:0; left:0; right:0; padding:20px; text-align:center; z-index:2; }
+  .scan-bottom p{ color:#fff; font-size:12.5px; margin:0 0 12px; opacity:.8; }
+  .scan-manual{ background:rgba(0,0,0,.5); border:none; color:#fff; font-size:12.5px; padding:10px 18px; border-radius:20px; font-family:var(--font-display); }
+  .scan-flash{ position:absolute; inset:0; background:var(--accent); opacity:0; pointer-events:none; z-index:3; }
+  .scan-flash.hit{ animation:flash .3s; }
+  @keyframes flash{ 0%{opacity:.5;} 100%{opacity:0;} }
+
+  .toast{
+    position:fixed; bottom:96px; left:50%; transform:translateX(-50%) translateY(20px); z-index:250;
+    background:var(--surface-3); color:var(--text); border:1px solid var(--line); padding:11px 18px; border-radius:30px;
+    font-size:13px; opacity:0; transition:opacity .2s, transform .2s; pointer-events:none; white-space:nowrap;
+  }
+  .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+
+  input[type=file]{ display:none; }
+</style>
+</head>
+<body>
+
+<div id="lock">
+  <div class="mark">📦</div>
+  <h1 id="lockTitle">Accès réservé</h1>
+  <p id="lockSub">Entre ton code à 4 chiffres pour ouvrir la feuille d'inventaire.</p>
+  <div class="pin-dots" id="pinDots">
+    <span></span><span></span><span></span><span></span>
+  </div>
+  <div id="lockHint">&nbsp;</div>
+  <div class="keypad" id="keypad">
+    <button data-k="1">1</button><button data-k="2">2</button><button data-k="3">3</button>
+    <button data-k="4">4</button><button data-k="5">5</button><button data-k="6">6</button>
+    <button data-k="7">7</button><button data-k="8">8</button><button data-k="9">9</button>
+    <button class="wide" data-k="theme">🌓</button><button data-k="0">0</button><button class="wide" data-k="back">⌫</button>
+  </div>
+</div>
+
+<div class="app" id="app" style="display:none;">
+  <header>
+    <div class="brand-row">
+      <div class="brand"><span class="mark">📦</span> Scanette</div>
+      <div class="head-actions">
+        <div class="sync-dot off" id="syncDot" title="Catalogue partagé : hors ligne">☁️</div>
+        <button class="icon-btn" id="themeBtn" title="Thème">🌓</button>
+        <button class="icon-btn" id="lockBtn" title="Verrouiller">⏻</button>
+      </div>
+    </div>
+    <div class="stat-row">
+      <div><span class="n" id="refCount">0</span> <span class="lbl">référence(s)</span></div>
+      <div><span class="n" id="totalQty">0</span> <span class="lbl">pièces scannées</span></div>
+    </div>
+  </header>
+
+  <main>
+    <div class="panel">
+      <div class="scan-row">
+        <button class="btn-scan" id="btnScan">▶ &nbsp;DÉMARRER LE SCAN</button>
+        <div class="stepper">
+          <button id="stepDown">−</button>
+          <div class="val" id="stepVal">×1</div>
+          <button id="stepUp">+</button>
+        </div>
+      </div>
+      <div class="row-btn2">
+        <button class="btn-ghost" id="btnPhotoRef">📷 Référence texte seule (sans code-barres)</button>
+      </div>
+      <div class="supplier-bar">
+        <div class="supplier-current" id="supplierCurrent">— aucun fournisseur —</div>
+        <button class="btn-add-supplier" id="btnAddSupplier">➕ Fournisseur</button>
+      </div>
+    </div>
+
+    <div class="selection-bar" id="selectionBar">
+      <div class="n" id="selCount">0 sélectionnée</div>
+      <button id="btnMove">📦 Déplacer vers…</button>
+      <button class="danger" id="btnDeleteSel">Suppr.</button>
+      <button id="btnCancelSel">Annuler</button>
+    </div>
+
+    <div id="groupsWrap"></div>
+
+    <div class="panel">
+      <div class="help-toggle" id="helpToggle">
+        <b style="font-size:13px;">Aide rapide</b>
+        <div class="q">?</div>
+      </div>
+      <div class="help-body" id="helpBody" style="display:none;">
+        <p><b>➕ Fournisseur</b> : pose un titre (ex. DELPHI). Tout ce que tu scannes ensuite se range dessous, jusqu'au fournisseur suivant.</p>
+        <p><b>▶ Scan</b> : codes-barres / QR. Nouveau produit → l'app propose une référence. Produit connu → +1 (ou +N) direct.</p>
+        <p><b>📷</b> : référence écrite sans code-barres, saisie manuelle en série.</p>
+        <p>Touche le chiffre de quantité d'une ligne pour la saisir directement.</p>
+        <p><b>☁️</b> : le catalogue code-barres → référence est partagé avec toute l'équipe en temps réel. Dès que quelqu'un identifie un code, tout le monde le voit. Les quantités et fournisseurs restent, eux, propres à cet appareil.</p>
+      </div>
+    </div>
+  </main>
+
+  <div class="toolbar">
+    <div class="toolbar-inner">
+      <div class="tb-grid">
+        <button id="btnPDF"><span class="ic">🖨</span>PDF</button>
+        <button id="btnCSV"><span class="ic">📄</span>CSV</button>
+        <button id="btnSync"><span class="ic">🔄</span>Sync</button>
+        <button id="btnClear"><span class="ic">🗑</span>Vider</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Scanner overlay -->
+<div id="scanOverlay">
+  <div class="scan-top">
+    <button class="close" id="btnCloseScan">✕</button>
+    <div class="right-group">
+      <button class="torch" id="btnTorch" title="Flash">💡</button>
+      <div class="mode-label" id="scanModeLabel">×1</div>
+    </div>
+  </div>
+  <div id="interactive"><video id="scanVideo" autoplay playsinline muted></video><div class="scan-flash" id="scanFlash"></div></div>
+  <div class="scan-frame"></div>
+  <div class="scan-bottom">
+    <p id="scanHint">Cadre le code-barres dans la zone</p>
+    <button class="scan-manual" id="btnManualCode">⌨️ Code illisible — saisir les chiffres</button>
+  </div>
+</div>
+
+<!-- Choix référence modal -->
+<div class="modal-backdrop" id="refModal">
+  <div class="sheet">
+    <h2>Choisis la référence</h2>
+    <p class="sub" id="refModalSub">Code inconnu — touche une référence proche ou tape-la.</p>
+    <div class="candidate-list" id="candidateList"></div>
+    <input class="field" id="refInput" placeholder="Nom de la référence">
+    <button class="btn-secondary" id="btnSearchOnline">🔍 Chercher ce code en ligne</button>
+    <button class="btn-primary" style="margin-top:10px;" id="btnConfirmRef">OK</button>
+    <button class="btn-secondary" id="btnSkipRef">Plus tard</button>
+  </div>
+</div>
+
+<!-- Nouveau fournisseur modal -->
+<div class="modal-backdrop" id="supplierModal">
+  <div class="sheet">
+    <h2>Nouveau fournisseur</h2>
+    <p class="sub">Ex. DELPHI, BOSCH, VALEO…</p>
+    <input class="field" id="supplierInput" placeholder="Nom du fournisseur">
+    <button class="btn-primary" id="btnConfirmSupplier">Créer</button>
+    <button class="btn-secondary" id="btnCancelSupplier">Annuler</button>
+  </div>
+</div>
+
+<!-- Déplacer vers modal -->
+<div class="modal-backdrop" id="moveModal">
+  <div class="sheet">
+    <h2>Déplacer vers…</h2>
+    <p class="sub">Choisis le fournisseur de destination.</p>
+    <div class="move-list" id="moveList"></div>
+    <button class="btn-secondary" id="btnCancelMove">Annuler</button>
+  </div>
+</div>
+
+<!-- Photo référence texte modal -->
+<div class="modal-backdrop" id="photoRefModal">
+  <div class="sheet">
+    <h2>Référence sans code-barres</h2>
+    <p class="sub">Tape la référence lue sur l'étiquette, valide, puis enchaîne la suivante.</p>
+    <div class="supplier-current active" id="photoRefSupplier" style="margin-bottom:12px;"></div>
+    <input class="field" id="photoRefInput" placeholder="Référence">
+    <button class="btn-primary" id="btnAddPhotoRef">➕ Ajouter et continuer</button>
+    <button class="btn-secondary" id="btnDonePhotoRef">Terminer</button>
+  </div>
+</div>
+
+<!-- Confirm modal générique -->
+<div class="modal-backdrop center" id="confirmModal">
+  <div class="sheet" style="border-radius:16px;">
+    <h2 id="confirmTitle">Confirmer</h2>
+    <p class="sub" id="confirmSub"></p>
+    <button class="btn-primary" id="confirmYes" style="background:var(--danger); color:#fff;">Confirmer</button>
+    <button class="btn-secondary" id="confirmNo">Annuler</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<input type="file" id="jsonImportInput" accept="application/json">
+
+<script>
+(function(){
+  "use strict";
+
+  /* ================= State ================= */
+  var STORE_KEY = 'scanette_data_v1';
+  var CATALOG_KEY = 'scanette_catalog_v1';
+  var PIN_KEY = 'scanette_pin_v1';
+  var THEME_KEY = 'scanette_theme_v1';
+
+  var state = loadState();
+  var catalog = loadCatalog(); // { code: refName } — local cache; source of truth is the shared db when connected
+  var selected = new Set();
+  var scanStep = 1;
+  var pendingCode = null; // barcode awaiting reference choice
+  var lastDetected = { code: null, t: 0 };
+
+  function loadState(){
+    try{
+      var raw = localStorage.getItem(STORE_KEY);
+      if(raw) return JSON.parse(raw);
+    }catch(e){}
+    return { suppliers: [], activeSupplierId: null };
+  }
+  function saveState(){
+    try{ localStorage.setItem(STORE_KEY, JSON.stringify(state)); }catch(e){ toast("Stockage plein ou indisponible"); }
+  }
+  function loadCatalog(){
+    try{
+      var raw = localStorage.getItem(CATALOG_KEY);
+      if(raw) return JSON.parse(raw);
+    }catch(e){}
+    return {};
+  }
+  function saveCatalog(){
+    try{ localStorage.setItem(CATALOG_KEY, JSON.stringify(catalog)); }catch(e){}
+  }
+
+  function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+  function normalizeRef(s){ return String(s==null?'':s).trim().replace(/\s+/g,' '); }
+
+  function getSupplier(id){
+    for(var i=0;i<state.suppliers.length;i++) if(state.suppliers[i].id===id) return state.suppliers[i];
+    return null;
+  }
+  function ensureUngrouped(){
+    var s = state.suppliers.find(function(x){ return x.id==='__none__'; });
+    if(!s){ s = { id:'__none__', name:'Sans fournisseur', items:[] }; state.suppliers.unshift(s); }
+    return s;
+  }
+
+  /* ================= Shared catalog (db capability) ================= */
+  var db = null;
+  var catalogMigrated = false;
+
+  function setSyncIndicator(on){
+    var el = document.getElementById('syncDot');
+    if(!el) return;
+    el.classList.toggle('on', !!on);
+    el.classList.toggle('off', !on);
+    el.title = on ? 'Catalogue partagé : synchronisé' : 'Catalogue partagé : hors ligne (mode local)';
+  }
+
+  function catalogDocRef(code){ return db.collection('catalog').doc(String(code)); }
+
+  function migrateLocalCatalogToDb(existingCodes){
+    Object.keys(catalog).forEach(function(code){
+      if(!existingCodes[code]){
+        catalogDocRef(code).set({ ref: catalog[code], updatedAt: new Date().toISOString() }).catch(function(){});
+      }
+    });
+  }
+
+  async function initSharedCatalog(){
+    try{
+      db = await claude.use('db');
+    }catch(e){ db = null; }
+    if(!db){ setSyncIndicator(false); return; }
+
+    db.collection('catalog').onSnapshot(function(snap){
+      var changed = false;
+      var existingCodes = {};
+      snap.docs.forEach(function(d){
+        existingCodes[d.id] = true;
+        var data = d.data();
+        if(data && data.ref && catalog[d.id] !== data.ref){
+          catalog[d.id] = data.ref;
+          changed = true;
+        }
+      });
+      if(changed){ saveCatalog(); }
+      setSyncIndicator(true);
+      if(!catalogMigrated){
+        catalogMigrated = true;
+        migrateLocalCatalogToDb(existingCodes);
+      }
+    }, function(err){
+      console.error(err);
+      setSyncIndicator(false);
+    });
+  }
+
+  function writeCatalogEntry(code, refName){
+    if(!db || !code) return;
+    try{
+      catalogDocRef(code).set({ ref: refName, updatedAt: new Date().toISOString() }).catch(function(e){ console.error(e); });
+    }catch(e){ console.error(e); }
+  }
+
+  /* ================= Lock / PIN ================= */
+  var $lock = document.getElementById('lock');
+  var $app = document.getElementById('app');
+  var pinBuffer = '';
+  var pinStored = null;
+  try{ pinStored = localStorage.getItem(PIN_KEY); }catch(e){}
+  var settingPin = !pinStored;
+  var firstPinEntry = '';
+
+  function renderPinDots(){
+    var dots = document.querySelectorAll('#pinDots span');
+    for(var i=0;i<dots.length;i++) dots[i].className = i < pinBuffer.length ? 'filled' : '';
+  }
+  function setLockHint(msg){ document.getElementById('lockHint').textContent = msg || ' '; }
+
+  if(settingPin){
+    document.getElementById('lockTitle').textContent = 'Bienvenue';
+    document.getElementById('lockSub').textContent = "Choisis un code à 4 chiffres pour protéger ta feuille d'inventaire.";
+  }
+
+  document.getElementById('keypad').addEventListener('click', function(e){
+    var btn = e.target.closest('button'); if(!btn) return;
+    var k = btn.getAttribute('data-k');
+    if(k === 'theme'){ toggleTheme(); return; }
+    if(k === 'back'){ pinBuffer = pinBuffer.slice(0,-1); renderPinDots(); return; }
+    if(pinBuffer.length >= 4) return;
+    pinBuffer += k;
+    renderPinDots();
+    if(pinBuffer.length === 4){ setTimeout(handlePinComplete, 150); }
+  });
+
+  function handlePinComplete(){
+    if(settingPin){
+      if(!firstPinEntry){
+        firstPinEntry = pinBuffer;
+        pinBuffer = '';
+        renderPinDots();
+        setLockHint('Confirme ton code');
+        return;
+      }
+      if(firstPinEntry === pinBuffer){
+        try{ localStorage.setItem(PIN_KEY, pinBuffer); }catch(e){}
+        unlock();
+      } else {
+        firstPinEntry = '';
+        pinBuffer = '';
+        renderPinDots();
+        shakeDots();
+        setLockHint('Les codes ne correspondent pas — recommence');
+      }
+    } else {
+      if(pinBuffer === pinStored){
+        unlock();
+      } else {
+        pinBuffer = '';
+        renderPinDots();
+        shakeDots();
+        setLockHint('Code incorrect');
+      }
+    }
+  }
+  function shakeDots(){
+    var d = document.getElementById('pinDots');
+    d.classList.add('shake');
+    setTimeout(function(){ d.classList.remove('shake'); }, 350);
+  }
+  function unlock(){
+    $lock.style.display = 'none';
+    $app.style.display = 'flex';
+    document.getElementById('app').style.flexDirection = 'column';
+    renderAll();
+  }
+  document.getElementById('lockBtn').addEventListener('click', function(){
+    $app.style.display = 'none';
+    $lock.style.display = 'flex';
+    pinBuffer = ''; renderPinDots(); setLockHint(' ');
+  });
+
+  /* ================= Theme ================= */
+  function applyTheme(t){
+    if(t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+    else document.documentElement.removeAttribute('data-theme');
+  }
+  function toggleTheme(){
+    var cur = localStorage.getItem(THEME_KEY) || 'auto';
+    var next = cur === 'auto' ? 'light' : (cur === 'light' ? 'dark' : 'auto');
+    localStorage.setItem(THEME_KEY, next);
+    applyTheme(next === 'auto' ? null : next);
+    toast('Thème : ' + (next === 'auto' ? 'automatique' : next === 'light' ? 'clair' : 'sombre'));
+  }
+  (function initTheme(){
+    var t = localStorage.getItem(THEME_KEY);
+    if(t && t !== 'auto') applyTheme(t);
+  })();
+  document.getElementById('themeBtn').addEventListener('click', toggleTheme);
+
+  /* ================= Toast ================= */
+  var toastTimer = null;
+  function toast(msg){
+    var t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function(){ t.classList.remove('show'); }, 1800);
+  }
+
+  /* ================= Rendering ================= */
+  function totalQty(){
+    var t = 0;
+    state.suppliers.forEach(function(s){ s.items.forEach(function(it){ t += it.qty; }); });
+    return t;
+  }
+  function totalRefs(){
+    var t = 0;
+    state.suppliers.forEach(function(s){ t += s.items.length; });
+    return t;
+  }
+  function renderHeader(){
+    document.getElementById('refCount').textContent = totalRefs();
+    document.getElementById('totalQty').textContent = totalQty();
+  }
+  function renderSupplierBar(){
+    var el = document.getElementById('supplierCurrent');
+    if(state.activeSupplierId){
+      var s = getSupplier(state.activeSupplierId);
+      if(s){ el.textContent = '📦 ' + s.name; el.classList.add('active'); return; }
+    }
+    el.textContent = '— aucun fournisseur —';
+    el.classList.remove('active');
+  }
+  function renderStep(){
+    document.getElementById('stepVal').textContent = '×' + scanStep;
+    document.getElementById('scanModeLabel').textContent = '×' + scanStep;
+  }
+
+  function renderGroups(){
+    var wrap = document.getElementById('groupsWrap');
+    var visible = state.suppliers.filter(function(s){ return s.items.length > 0; });
+    if(visible.length === 0){
+      wrap.innerHTML = '<div class="panel empty-state"><div class="big">📭</div><p>Aucune référence scannée pour l\'instant.<br>Lance le scan ou ajoute une référence texte.</p></div>';
+      updateSelectionBar();
+      return;
+    }
+    var html = '';
+    visible.forEach(function(s){
+      html += '<div class="group panel" data-supplier="'+s.id+'">';
+      html += '<div class="group-head"><span class="name">'+escapeHtml(s.name.toUpperCase())+'</span><span class="count">'+s.items.length+' réf.</span></div>';
+      s.items.forEach(function(it){
+        var checked = selected.has(it.id);
+        html += '<div class="item-row" data-item="'+it.id+'" data-supplier="'+s.id+'">';
+        html += '<div class="chk'+(checked?' on':'')+'" data-role="chk">'+(checked?'✓':'')+'</div>';
+        html += '<div class="ref"><div class="r1">'+escapeHtml(it.ref)+'</div><div class="r2">'+escapeHtml(it.code||'saisie manuelle')+'</div></div>';
+        html += '<div class="qty-stepper">';
+        html += '<button data-role="qdown">−</button>';
+        html += '<div class="q" data-role="qval">'+it.qty+'</div>';
+        html += '<button data-role="qup">+</button>';
+        html += '</div></div>';
+      });
+      html += '</div>';
+    });
+    wrap.innerHTML = html;
+  }
+
+  function escapeHtml(s){
+    return String(s==null?'':s).replace(/[&<>"']/g, function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
+
+  function updateSelectionBar(){
+    var bar = document.getElementById('selectionBar');
+    if(selected.size > 0){
+      bar.classList.add('show');
+      document.getElementById('selCount').textContent = selected.size + (selected.size>1?' sélectionnées':' sélectionnée');
+    } else {
+      bar.classList.remove('show');
+    }
+  }
+
+  function renderAll(){
+    renderHeader();
+    renderSupplierBar();
+    renderStep();
+    renderGroups();
+    updateSelectionBar();
+  }
+
+  /* ================= Item ops ================= */
+  function findItemByCode(code){
+    for(var i=0;i<state.suppliers.length;i++){
+      var s = state.suppliers[i];
+      for(var j=0;j<s.items.length;j++){
+        if(s.items[j].code === code) return { item:s.items[j], supplier:s };
+      }
+    }
+    return null;
+  }
+
+  function addOrIncrement(refName, code){
+    refName = normalizeRef(refName);
+    var supplier = state.activeSupplierId ? getSupplier(state.activeSupplierId) : ensureUngrouped();
+    if(!supplier){ supplier = ensureUngrouped(); }
+    var existing = supplier.items.find(function(it){ return code ? it.code === code : it.ref.toLowerCase() === refName.toLowerCase(); });
+    if(existing){
+      existing.qty += scanStep;
+    } else {
+      supplier.items.push({ id: uid(), ref: refName, code: code || null, qty: scanStep });
+    }
+    if(code && catalog[code] !== refName){
+      catalog[code] = refName;
+      saveCatalog();
+      writeCatalogEntry(code, refName);
+    }
+    saveState();
+    renderAll();
+  }
+
+  function handleScannedCode(code){
+    var known = findItemByCode(code);
+    if(known || catalog[code]){
+      var refName = known ? known.item.ref : catalog[code];
+      addOrIncrement(refName, code);
+      flashScan(true);
+      toast('✓ ' + refName + '  +' + scanStep);
+    } else {
+      flashScan(false);
+      openRefModal(code);
+    }
+  }
+
+  /* ================= Scanner (BarcodeDetector natif, fallback ZXing) ================= */
+  var $overlay = document.getElementById('scanOverlay');
+  var scanState = { mode: null, stream: null, timer: null };
+  var barcodeDetector = null;
+  var codeReader = null; // lazy ZXing.BrowserMultiFormatReader
+  var detectBusy = false;
+  var torchOn = false;
+  // Haute résolution demandée : un petit code-barres ou une portion abîmée ne tient
+  // que sur quelques pixels en basse résolution, ce qui le rend indécodable au
+  // moindre défaut d'impression. Plus de pixels par barre = plus de marge d'erreur.
+  var SCAN_CONSTRAINTS = { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } };
+
+  function flashScan(ok){
+    var f = document.getElementById('scanFlash');
+    f.style.background = ok ? 'var(--success)' : 'var(--accent)';
+    f.classList.remove('hit'); void f.offsetWidth; f.classList.add('hit');
+  }
+
+  function startScan(){
+    $overlay.classList.add('show');
+    var video = document.getElementById('scanVideo');
+    if('BarcodeDetector' in window){
+      startNativeScan(video);
+    } else {
+      startZXingScan(video);
+    }
+  }
+
+  // Chrome/Edge/Android : décodage natif OS, rapide et couvre aussi QR/DataMatrix.
+  function startNativeScan(video){
+    try{
+      if(!barcodeDetector){
+        barcodeDetector = new BarcodeDetector({
+          formats: ['ean_13','ean_8','upc_a','upc_e','code_128','code_39','codabar','itf','qr_code','data_matrix']
+        });
+      }
+    }catch(e){ startZXingScan(video); return; }
+    navigator.mediaDevices.getUserMedia({ video: SCAN_CONSTRAINTS })
+      .then(function(stream){
+        scanState.mode = 'native';
+        scanState.stream = stream;
+        video.srcObject = stream;
+        setupTorchButton(stream.getVideoTracks()[0]);
+        scanState.timer = setInterval(function(){
+          if(detectBusy) return;
+          detectBusy = true;
+          barcodeDetector.detect(video).then(function(codes){
+            detectBusy = false;
+            if(codes && codes.length){ onDetectedCode(codes[0].rawValue); }
+          }).catch(function(){ detectBusy = false; });
+        }, 200);
+      })
+      .catch(function(err){ toast('Impossible d\'accéder à la caméra'); console.error(err); });
+  }
+
+  // Safari / Firefox : pas de BarcodeDetector natif, on retombe sur ZXing (maintenu, gère QR + 1D).
+  function startZXingScan(video){
+    if(typeof ZXing === 'undefined'){ toast('Scanner indisponible — connexion requise'); return; }
+    try{
+      if(!codeReader) codeReader = new ZXing.BrowserMultiFormatReader();
+      scanState.mode = 'zxing';
+      codeReader.decodeFromConstraints(
+        { video: SCAN_CONSTRAINTS },
+        video,
+        function(result){ if(result) onDetectedCode(result.getText()); }
+      ).then(function(){
+        var track = video.srcObject && video.srcObject.getVideoTracks()[0];
+        if(track) setupTorchButton(track);
+      }).catch(function(err){ toast('Impossible d\'accéder à la caméra'); console.error(err); });
+    }catch(e){ toast('Scanner indisponible'); console.error(e); }
+  }
+
+  // Flash/torche : très utile sur étiquettes brillantes, sombres ou mal éclairées.
+  // Le bouton reste caché si l'appareil ne l'expose pas (iPhone Safari, notamment).
+  function setupTorchButton(track){
+    var btn = document.getElementById('btnTorch');
+    var caps = track && track.getCapabilities ? track.getCapabilities() : {};
+    if(!track || !caps.torch){ btn.style.display = 'none'; return; }
+    btn.style.display = 'flex';
+    btn.onclick = function(){
+      torchOn = !torchOn;
+      track.applyConstraints({ advanced: [{ torch: torchOn }] }).then(function(){
+        btn.classList.toggle('active', torchOn);
+      }).catch(function(){ torchOn = false; toast('Flash indisponible'); });
+    };
+  }
+
+  function onDetectedCode(code){
+    if(!code) return;
+    var now = Date.now();
+    if(code === lastDetected.code && (now - lastDetected.t) < 1400) return;
+    lastDetected = { code: code, t: now };
+    if(navigator.vibrate) navigator.vibrate(60);
+    handleScannedCode(code);
+  }
+
+  function stopScan(){
+    $overlay.classList.remove('show');
+    if(scanState.timer){ clearInterval(scanState.timer); scanState.timer = null; }
+    if(scanState.stream){ scanState.stream.getTracks().forEach(function(t){ t.stop(); }); scanState.stream = null; }
+    if(codeReader){ try{ codeReader.reset(); }catch(e){} }
+    var video = document.getElementById('scanVideo');
+    if(video) video.srcObject = null;
+    var btnTorch = document.getElementById('btnTorch');
+    btnTorch.style.display = 'none';
+    btnTorch.classList.remove('active');
+    torchOn = false;
+    scanState.mode = null;
+  }
+  document.getElementById('btnScan').addEventListener('click', startScan);
+  document.getElementById('btnCloseScan').addEventListener('click', stopScan);
+
+  // Filet de secours : un trait effacé ou un code écrasé, c'est une info perdue sur
+  // le papier — aucun algorithme ne la retrouve. On laisse taper les chiffres
+  // imprimés sous les barres, qui restent lisibles même quand les barres ne le sont plus.
+  document.getElementById('btnManualCode').addEventListener('click', function(){
+    var code = prompt('Chiffres imprimés sous le code-barres :');
+    if(code === null) return;
+    code = code.trim();
+    if(!code){ toast('Entre un code'); return; }
+    handleScannedCode(code);
+  });
+
+  /* ================= Stepper (scan multiplier) ================= */
+  document.getElementById('stepUp').addEventListener('click', function(){ scanStep = Math.min(99, scanStep+1); renderStep(); });
+  document.getElementById('stepDown').addEventListener('click', function(){ scanStep = Math.max(1, scanStep-1); renderStep(); });
+
+  /* ================= Référence inconnue modal ================= */
+  var $refModal = document.getElementById('refModal');
+  function openRefModal(code){
+    pendingCode = code;
+    document.getElementById('refModalSub').textContent = 'Code ' + code + ' — touche une référence proche ou tape-la.';
+    document.getElementById('refInput').value = '';
+    var candidates = Object.keys(catalog).filter(function(c){ return c !== code; })
+      .map(function(c){ return catalog[c]; })
+      .filter(function(v, i, a){ return a.indexOf(v) === i; })
+      .slice(0, 6);
+    var list = document.getElementById('candidateList');
+    list.innerHTML = candidates.map(function(c){ return '<button class="candidate" data-ref="'+escapeHtml(c)+'">'+escapeHtml(c)+'</button>'; }).join('');
+    $refModal.classList.add('show');
+    setTimeout(function(){ document.getElementById('refInput').focus(); }, 200);
+  }
+  document.getElementById('candidateList').addEventListener('click', function(e){
+    var b = e.target.closest('.candidate'); if(!b) return;
+    document.getElementById('refInput').value = b.getAttribute('data-ref');
+  });
+  document.getElementById('btnConfirmRef').addEventListener('click', function(){
+    var val = normalizeRef(document.getElementById('refInput').value);
+    if(!val){ toast('Entre un nom de référence'); return; }
+    addOrIncrement(val, pendingCode);
+    $refModal.classList.remove('show');
+    toast('✓ ' + val + ' ajouté');
+  });
+  document.getElementById('btnSkipRef').addEventListener('click', function(){ $refModal.classList.remove('show'); });
+  document.getElementById('btnSearchOnline').addEventListener('click', function(){
+    if(pendingCode) window.open('https://www.google.com/search?q=' + encodeURIComponent(pendingCode), '_blank');
+  });
+
+  /* ================= Fournisseur modal ================= */
+  var $supplierModal = document.getElementById('supplierModal');
+  document.getElementById('btnAddSupplier').addEventListener('click', function(){
+    document.getElementById('supplierInput').value = '';
+    $supplierModal.classList.add('show');
+    setTimeout(function(){ document.getElementById('supplierInput').focus(); }, 200);
+  });
+  document.getElementById('btnCancelSupplier').addEventListener('click', function(){ $supplierModal.classList.remove('show'); });
+  document.getElementById('btnConfirmSupplier').addEventListener('click', function(){
+    var name = normalizeRef(document.getElementById('supplierInput').value);
+    if(!name){ toast('Entre un nom'); return; }
+    var s = { id: uid(), name: name, items: [] };
+    state.suppliers.push(s);
+    state.activeSupplierId = s.id;
+    saveState();
+    renderAll();
+    $supplierModal.classList.remove('show');
+    toast('Fournisseur "' + name + '" actif');
+  });
+  document.getElementById('supplierCurrent').addEventListener('click', function(){
+    // tap active supplier chip to clear it
+    if(state.activeSupplierId){
+      state.activeSupplierId = null;
+      saveState();
+      renderSupplierBar();
+      toast('Fournisseur désactivé');
+    }
+  });
+
+  /* ================= Photo référence (texte seul) ================= */
+  var $photoRefModal = document.getElementById('photoRefModal');
+  document.getElementById('btnPhotoRef').addEventListener('click', function(){
+    var s = state.activeSupplierId ? getSupplier(state.activeSupplierId) : null;
+    document.getElementById('photoRefSupplier').textContent = s ? ('📦 ' + s.name) : '— aucun fournisseur —';
+    document.getElementById('photoRefInput').value = '';
+    $photoRefModal.classList.add('show');
+    setTimeout(function(){ document.getElementById('photoRefInput').focus(); }, 200);
+  });
+  document.getElementById('btnAddPhotoRef').addEventListener('click', function(){
+    var val = normalizeRef(document.getElementById('photoRefInput').value);
+    if(!val){ toast('Entre une référence'); return; }
+    addOrIncrement(val, null);
+    document.getElementById('photoRefInput').value = '';
+    document.getElementById('photoRefInput').focus();
+    toast('✓ ' + val + ' ajouté');
+  });
+  document.getElementById('btnDonePhotoRef').addEventListener('click', function(){ $photoRefModal.classList.remove('show'); });
+
+  /* ================= Groups interactions (delegation) ================= */
+  document.getElementById('groupsWrap').addEventListener('click', function(e){
+    var row = e.target.closest('.item-row'); if(!row) return;
+    var itemId = row.getAttribute('data-item');
+    var supplierId = row.getAttribute('data-supplier');
+    var supplier = getSupplier(supplierId);
+    if(!supplier) return;
+    var item = supplier.items.find(function(it){ return it.id === itemId; });
+    if(!item) return;
+
+    var role = e.target.closest('[data-role]');
+    role = role ? role.getAttribute('data-role') : null;
+
+    if(role === 'qup'){ item.qty += 1; saveState(); renderAll(); return; }
+    if(role === 'qdown'){
+      item.qty = Math.max(0, item.qty - 1);
+      if(item.qty === 0){ supplier.items = supplier.items.filter(function(it){ return it.id !== itemId; }); }
+      saveState(); renderAll(); return;
+    }
+    if(role === 'qval'){
+      var nv = prompt('Nouvelle quantité pour "' + item.ref + '"', item.qty);
+      if(nv === null) return;
+      nv = parseInt(nv, 10);
+      if(isNaN(nv) || nv < 0){ toast('Quantité invalide'); return; }
+      if(nv === 0){ supplier.items = supplier.items.filter(function(it){ return it.id !== itemId; }); }
+      else item.qty = nv;
+      saveState(); renderAll(); return;
+    }
+    // default: toggle checkbox / selection
+    if(selected.has(itemId)) selected.delete(itemId); else selected.add(itemId);
+    renderGroups(); updateSelectionBar();
+  });
+
+  /* ================= Selection bar ================= */
+  document.getElementById('btnCancelSel').addEventListener('click', function(){ selected.clear(); renderGroups(); updateSelectionBar(); });
+  document.getElementById('btnDeleteSel').addEventListener('click', function(){
+    openConfirm('Supprimer la sélection ?', selected.size + ' référence(s) seront supprimées.', function(){
+      state.suppliers.forEach(function(s){ s.items = s.items.filter(function(it){ return !selected.has(it.id); }); });
+      selected.clear();
+      saveState(); renderAll();
+      toast('Supprimé');
+    });
+  });
+
+  var $moveModal = document.getElementById('moveModal');
+  document.getElementById('btnMove').addEventListener('click', function(){
+    var list = document.getElementById('moveList');
+    if(state.suppliers.length === 0){ toast('Crée d\'abord un fournisseur'); return; }
+    list.innerHTML = state.suppliers.map(function(s){
+      return '<button data-dest="'+s.id+'">📦 ' + escapeHtml(s.name) + '</button>';
+    }).join('');
+    $moveModal.classList.add('show');
+  });
+  document.getElementById('moveList').addEventListener('click', function(e){
+    var b = e.target.closest('button'); if(!b) return;
+    var destId = b.getAttribute('data-dest');
+    var dest = getSupplier(destId);
+    if(!dest) return;
+    var moved = [];
+    state.suppliers.forEach(function(s){
+      s.items = s.items.filter(function(it){
+        if(selected.has(it.id)){ moved.push(it); return false; }
+        return true;
+      });
+    });
+    moved.forEach(function(it){
+      var existing = dest.items.find(function(x){ return it.code ? x.code === it.code : x.ref.toLowerCase() === it.ref.toLowerCase(); });
+      if(existing) existing.qty += it.qty; else dest.items.push(it);
+    });
+    selected.clear();
+    saveState(); renderAll();
+    $moveModal.classList.remove('show');
+    toast('Déplacé vers ' + dest.name);
+  });
+  document.getElementById('btnCancelMove').addEventListener('click', function(){ $moveModal.classList.remove('show'); });
+
+  /* ================= Confirm modal ================= */
+  var $confirmModal = document.getElementById('confirmModal');
+  var confirmCb = null;
+  function openConfirm(title, sub, cb){
+    document.getElementById('confirmTitle').textContent = title;
+    document.getElementById('confirmSub').textContent = sub;
+    confirmCb = cb;
+    $confirmModal.classList.add('show');
+  }
+  document.getElementById('confirmYes').addEventListener('click', function(){
+    $confirmModal.classList.remove('show');
+    if(confirmCb) confirmCb();
+    confirmCb = null;
+  });
+  document.getElementById('confirmNo').addEventListener('click', function(){
+    $confirmModal.classList.remove('show'); confirmCb = null;
+  });
+
+  /* ================= Vider ================= */
+  document.getElementById('btnClear').addEventListener('click', function(){
+    openConfirm('Vider la feuille ?', 'Toutes les références et quantités seront supprimées. Le catalogue de correspondances est conservé.', function(){
+      state.suppliers = [];
+      state.activeSupplierId = null;
+      selected.clear();
+      saveState(); renderAll();
+      toast('Feuille vidée');
+    });
+  });
+
+  /* ================= Help ================= */
+  document.getElementById('helpToggle').addEventListener('click', function(){
+    var b = document.getElementById('helpBody');
+    b.style.display = b.style.display === 'none' ? 'block' : 'none';
+  });
+
+  /* ================= Export CSV ================= */
+  async function downloadFile(filename, data){
+    // Dans un artifact Claude : passe par la capacité "downloads" (page sandboxée).
+    // Servi comme site normal (GitHub Pages, etc.) : `claude` n'existe pas, on
+    // retombe sur un téléchargement navigateur classique.
+    if(typeof claude !== 'undefined'){
+      try{
+        var downloads = await claude.use('downloads');
+        if(downloads){
+          var res = await downloads.save({ filename: filename, data: data });
+          toast(res.status === 'delivered' ? 'Fichier envoyé' : 'Fichier enregistré');
+          return;
+        }
+      }catch(err){
+        if(err && err.code === 'declined'){ return; }
+        console.error(err);
+      }
+    }
+    try{
+      var url = URL.createObjectURL(data);
+      var a = document.createElement('a');
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function(){ URL.revokeObjectURL(url); }, 2000);
+      toast('Fichier téléchargé');
+    }catch(err){
+      toast('Échec de l\'export');
+      console.error(err);
+    }
+  }
+
+  document.getElementById('btnCSV').addEventListener('click', function(){
+    if(totalRefs() === 0){ toast('Rien à exporter'); return; }
+    var lines = [['Fournisseur','Référence','Code','Quantité'].join(';')];
+    state.suppliers.forEach(function(s){
+      s.items.forEach(function(it){
+        lines.push([s.name, it.ref, it.code||'', it.qty].map(function(v){
+          return '"' + String(v).replace(/"/g,'""') + '"';
+        }).join(';'));
+      });
+    });
+    var blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv' });
+    var d = new Date();
+    var fname = 'scanette_' + d.toISOString().slice(0,10) + '.csv';
+    downloadFile(fname, blob);
+  });
+
+  /* ================= Export PDF ================= */
+  document.getElementById('btnPDF').addEventListener('click', function(){
+    if(totalRefs() === 0){ toast('Rien à exporter'); return; }
+    if(typeof window.jspdf === 'undefined'){ toast('Générateur PDF indisponible'); return; }
+    var jsPDF = window.jspdf.jsPDF;
+    var doc = new jsPDF();
+    var y = 18;
+    doc.setFont('helvetica','bold'); doc.setFontSize(16);
+    doc.text('Scanette — feuille d\'inventaire', 14, y);
+    doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(120);
+    y += 6;
+    doc.text(new Date().toLocaleString('fr-FR'), 14, y);
+    doc.setTextColor(0);
+    y += 10;
+    state.suppliers.forEach(function(s){
+      if(s.items.length === 0) return;
+      if(y > 270){ doc.addPage(); y = 18; }
+      doc.setFont('helvetica','bold'); doc.setFontSize(12);
+      doc.text(s.name, 14, y);
+      y += 6;
+      doc.setFont('helvetica','normal'); doc.setFontSize(10);
+      doc.setDrawColor(210); doc.line(14, y-4, 196, y-4);
+      s.items.forEach(function(it){
+        if(y > 280){ doc.addPage(); y = 18; }
+        var refLines = doc.splitTextToSize(it.ref, 150);
+        doc.text(refLines, 16, y);
+        doc.text(String(it.qty), 180, y, { align: 'right' });
+        y += 6 * refLines.length;
+      });
+      y += 4;
+    });
+    y += 4;
+    doc.setFont('helvetica','bold');
+    doc.text('Total pièces scannées : ' + totalQty(), 14, Math.min(y, 285));
+    var d = new Date();
+    var fname = 'scanette_' + d.toISOString().slice(0,10) + '.pdf';
+    var blob = doc.output('blob');
+    downloadFile(fname, blob);
+  });
+
+  /* ================= Sync (sauvegarde JSON) ================= */
+  var syncTapCount = 0, syncTapTimer = null;
+  document.getElementById('btnSync').addEventListener('click', function(){
+    saveState(); saveCatalog();
+    toast(db ? '✓ Sauvegarde locale à jour (catalogue déjà partagé en direct)' : '✓ Synchronisé (sauvegarde locale à jour)');
+    syncTapCount++;
+    clearTimeout(syncTapTimer);
+    syncTapTimer = setTimeout(function(){ syncTapCount = 0; }, 600);
+    if(syncTapCount >= 3){
+      syncTapCount = 0;
+      openConfirm('Exporter une sauvegarde complète ?', 'Génère un fichier JSON (inventaire + catalogue) que tu pourras réimporter plus tard.', function(){
+        var payload = JSON.stringify({ state: state, catalog: catalog, exportedAt: new Date().toISOString() }, null, 2);
+        var blob = new Blob([payload], { type: 'application/json' });
+        downloadFile('scanette_sauvegarde_' + new Date().toISOString().slice(0,10) + '.json', blob);
+      });
+    }
+  });
+
+  /* ================= Import JSON (sauvegarde) ================= */
+  document.getElementById('btnClear').addEventListener('dblclick', function(){
+    document.getElementById('jsonImportInput').click();
+  });
+  document.getElementById('jsonImportInput').addEventListener('change', function(e){
+    var file = e.target.files && e.target.files[0];
+    if(!file) return;
+    var reader = new FileReader();
+    reader.onload = function(){
+      try{
+        var payload = JSON.parse(reader.result);
+        if(!payload || !payload.state || !Array.isArray(payload.state.suppliers)){
+          toast('Fichier de sauvegarde invalide');
+          return;
+        }
+        openConfirm('Importer cette sauvegarde ?', 'Remplace la feuille actuelle sur cet appareil par le contenu du fichier.', function(){
+          state = payload.state;
+          if(payload.catalog){
+            Object.keys(payload.catalog).forEach(function(code){
+              if(catalog[code] !== payload.catalog[code]){
+                catalog[code] = payload.catalog[code];
+                writeCatalogEntry(code, payload.catalog[code]);
+              }
+            });
+            saveCatalog();
+          }
+          saveState(); renderAll();
+          toast('Sauvegarde importée');
+        });
+      }catch(err){
+        toast('Fichier illisible');
+        console.error(err);
+      }
+      e.target.value = '';
+    };
+    reader.readAsText(file);
+  });
+
+  /* ================= Init ================= */
+  renderPinDots();
+  initSharedCatalog();
+})();
+</script>
+</body>
+</html>
