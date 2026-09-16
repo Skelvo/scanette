@@ -305,6 +305,11 @@
   .candidate:active{ background:var(--surface-3); }
   .move-list{ display:flex; flex-direction:column; gap:6px; margin-bottom:6px; max-height:220px; overflow-y:auto; overflow-x:hidden; }
   .move-list button{ text-align:left; background:var(--surface-2); border:1px solid var(--line); color:var(--text); border-radius:var(--radius-sm); padding:11px 12px; font-size:13.5px; font-weight:600; display:flex; align-items:center; gap:8px; }
+  .supplier-row{ display:flex; align-items:stretch; gap:6px; }
+  .supplier-row button[data-activate]{ flex:1; min-width:0; }
+  .supplier-row button[data-activate] .name{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .supplier-row .row-icon-btn{ background:var(--surface-2); border:1px solid var(--line); border-radius:var(--radius-sm); }
+  .tag-active{ font-size:10.5px; font-weight:700; color:var(--accent); border:1px solid var(--accent); border-radius:20px; padding:1px 7px; margin-left:auto; flex-shrink:0; }
 
   /* ---------- Scanner overlay ---------- */
   #scanOverlay{ position:fixed; inset:0; z-index:150; background:#000; display:none; flex-direction:column; }
@@ -1409,7 +1414,12 @@
     var list = document.getElementById('existingSupplierList');
     if(real.length === 0){ list.innerHTML = ''; return; }
     list.innerHTML = real.map(function(s){
-      return '<button data-activate="'+s.id+'"><svg class="icon"><use href="#i-box"/></svg> ' + escapeHtml(s.name) + '</button>';
+      return '<div class="supplier-row">'
+        + '<button data-activate="'+s.id+'"><svg class="icon"><use href="#i-box"/></svg> <span class="name">' + escapeHtml(s.name) + '</span>'
+        + (s.id === state.activeSupplierId ? '<span class="tag-active">actif</span>' : '')
+        + '</button>'
+        + '<button class="row-icon-btn" data-delete="'+s.id+'" title="Supprimer">✕</button>'
+        + '</div>';
     }).join('');
   }
   function openSupplierModal(){
@@ -1420,6 +1430,23 @@
   document.getElementById('btnAddSupplier').addEventListener('click', openSupplierModal);
   document.getElementById('existingSupplierList').addEventListener('click', function(e){
     var b = e.target.closest('button'); if(!b) return;
+    var delId = b.getAttribute('data-delete');
+    if(delId){
+      var target = getSupplier(delId);
+      if(!target) return;
+      var count = target.items.length;
+      openConfirm(
+        'Supprimer "' + target.name + '" ?',
+        count > 0 ? count + ' article(s) de ce fournisseur seront définitivement perdus.' : 'Cette action est définitive.',
+        function(){
+          state.suppliers = state.suppliers.filter(function(s){ return s.id !== delId; });
+          if(state.activeSupplierId === delId) state.activeSupplierId = '__none__';
+          saveState(); renderAll(); renderExistingSupplierList();
+          toast('Fournisseur supprimé');
+        }
+      );
+      return;
+    }
     var id = b.getAttribute('data-activate');
     var s = getSupplier(id);
     if(!s) return;
