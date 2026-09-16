@@ -216,6 +216,16 @@
   .catalog-row .ref-wrap .ref{ font-family:var(--font-mono); font-weight:700; font-size:15px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .catalog-row .ref-wrap .code{ font-size:11px; color:var(--text-faint); margin-top:1px; }
 
+  .history-row{ border-bottom:1px solid var(--line); padding:10px 2px; }
+  .history-row-head{ display:flex; align-items:center; justify-content:space-between; cursor:pointer; }
+  .history-row-head .date{ font-weight:700; font-size:14px; }
+  .history-row-head .meta{ display:block; font-size:11.5px; color:var(--text-dim); margin-top:2px; }
+  .history-row-actions{ display:flex; gap:6px; margin-top:6px; }
+  .history-detail{ display:none; margin-top:8px; padding-left:8px; border-left:2px solid var(--line); }
+  .history-detail.show{ display:block; }
+  .history-item{ display:flex; justify-content:space-between; font-family:var(--font-mono); font-size:12.5px; padding:3px 0; color:var(--text-dim); }
+  .history-group-name{ font-weight:700; font-size:11px; color:var(--text-dim); margin-top:6px; letter-spacing:.3px; }
+
   .empty-state{ text-align:center; padding:40px 20px; color:var(--text-faint); }
   .empty-state .big{ font-size:30px; margin-bottom:8px; }
   .empty-state p{ font-size:13px; line-height:1.6; margin:4px 0 0; }
@@ -353,6 +363,7 @@
       <div class="head-actions">
         <div class="sync-dot off" id="syncDot" title="Catalogue partagé : hors ligne">☁️</div>
         <button class="icon-btn" id="catalogBtn" title="Catalogue">📚</button>
+        <button class="icon-btn" id="historyBtn" title="Historique">🕓</button>
         <button class="icon-btn" id="themeBtn" title="Thème">🌓</button>
         <button class="icon-btn" id="lockBtn" title="Verrouiller">⏻</button>
       </div>
@@ -412,6 +423,7 @@
         <p><b>↩ Annuler</b> apparaît après chaque scan ou changement de quantité, pour revenir en arrière en un geste.</p>
         <p><b>☁️</b> : le catalogue code-barres → référence est partagé avec toute l'équipe en temps réel. Dès que quelqu'un identifie un code, tout le monde le voit. Les quantités et fournisseurs restent, eux, propres à cet appareil.</p>
         <p><b>📚 Catalogue</b> : voir, renommer, supprimer ou ajouter à la main toutes les correspondances code-barres → référence connues sur cet appareil.</p>
+        <p><b>🕓 Historique</b> : chaque "Vider" garde une sauvegarde datée, consultable, exportable en CSV, ou restaurable sur la feuille en cours.</p>
       </div>
     </div>
   </main>
@@ -525,6 +537,16 @@
   </div>
 </div>
 
+<!-- Historique modal -->
+<div class="modal-backdrop" id="historyModal">
+  <div class="sheet" style="max-height:90vh;">
+    <h2>Historique</h2>
+    <p class="sub">Une sauvegarde se crée automatiquement chaque fois que tu vides la feuille.</p>
+    <div id="historyList"></div>
+    <button class="btn-secondary" id="btnCloseHistory">Fermer</button>
+  </div>
+</div>
+
 <!-- Confirm modal générique -->
 <div class="modal-backdrop center" id="confirmModal">
   <div class="sheet" style="border-radius:16px;">
@@ -575,9 +597,11 @@
   var PIN_KEY = 'scanette_pin_v1';
   var THEME_KEY = 'scanette_theme_v1';
   var SORT_KEY = 'scanette_sort_v1';
+  var HISTORY_KEY = 'scanette_history_v1';
 
   var state = loadState();
   var catalog = loadCatalog(); // { code: refName } — local cache; source of truth is the shared db when connected
+  var history = loadHistory(); // sauvegardes automatiques créées à chaque "Vider"
   var selected = new Set();
   var listFilterText = '';
   var sortMode = 'scan';
@@ -623,6 +647,28 @@
   }
   function saveCatalog(){
     try{ localStorage.setItem(CATALOG_KEY, JSON.stringify(catalog)); }catch(e){}
+  }
+  function loadHistory(){
+    try{
+      var raw = localStorage.getItem(HISTORY_KEY);
+      if(raw) return JSON.parse(raw);
+    }catch(e){}
+    return [];
+  }
+  function saveHistory(){
+    try{ localStorage.setItem(HISTORY_KEY, JSON.stringify(history)); }catch(e){}
+  }
+  // Appelé juste avant de vider la feuille : garde une photo de ce qui a été
+  // pointé, avec la date, pour pouvoir la consulter/exporter plus tard.
+  function snapshotToHistory(){
+    if(totalRefs() === 0) return;
+    history.unshift({
+      id: uid(),
+      date: new Date().toISOString(),
+      suppliers: JSON.parse(JSON.stringify(state.suppliers))
+    });
+    if(history.length > 20) history.length = 20;
+    saveHistory();
   }
 
   function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
@@ -1557,14 +1603,15 @@
 
   /* ================= Vider ================= */
   document.getElementById('btnClear').addEventListener('click', function(){
-    openConfirm('Vider la feuille ?', 'Toutes les références et quantités seront supprimées. Le catalogue de correspondances est conservé.', function(){
+    openConfirm('Vider la feuille ?', 'Une sauvegarde est gardée dans l\'historique (🕓). Le catalogue de correspondances est conservé aussi.', function(){
+      snapshotToHistory();
       state.suppliers = [];
       state.activeSupplierId = null;
       selected.clear();
       lastAction = null;
       document.getElementById('lastActionBar').classList.remove('show');
       saveState(); renderAll();
-      toast('Feuille vidée');
+      toast('Feuille vidée — sauvegardée dans l\'historique');
     });
   });
 
@@ -1839,6 +1886,93 @@
     document.getElementById('catalogFilter').value = '';
     renderCatalogList();
     document.getElementById('catalogModal').classList.add('show');
+  });
+
+  /* ================= Historique ================= */
+  function formatHistoryDate(iso){
+    var d = new Date(iso);
+    return d.toLocaleDateString('fr-FR', { day:'2-digit', month:'short', year:'numeric' }) + ' · ' + d.toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' });
+  }
+  function historyTotals(entry){
+    var refs = 0, qty = 0;
+    entry.suppliers.forEach(function(s){ refs += s.items.length; s.items.forEach(function(it){ qty += it.qty; }); });
+    return { refs: refs, qty: qty };
+  }
+  function renderHistoryList(){
+    var wrap = document.getElementById('historyList');
+    if(history.length === 0){
+      wrap.innerHTML = '<div class="empty-state"><p>Aucune sauvegarde pour l\'instant — elle se crée automatiquement quand tu vides la feuille.</p></div>';
+      return;
+    }
+    var html = '';
+    history.forEach(function(entry){
+      var t = historyTotals(entry);
+      html += '<div class="history-row" data-id="'+entry.id+'">';
+      html += '<div class="history-row-head" data-role="toggleHistory"><div><span class="date">'+formatHistoryDate(entry.date)+'</span><span class="meta">'+t.refs+' réf. · '+t.qty+' pièces</span></div><span>▾</span></div>';
+      html += '<div class="history-row-actions">';
+      html += '<button class="row-icon-btn" data-role="exportHistoryCsv" title="Exporter en CSV">📄 CSV</button>';
+      html += '<button class="row-icon-btn" data-role="restoreHistory" title="Restaurer sur la feuille">↩ Restaurer</button>';
+      html += '<button class="row-icon-btn" data-role="deleteHistory" title="Supprimer">✕</button>';
+      html += '</div>';
+      html += '<div class="history-detail" id="historyDetail_'+entry.id+'">';
+      entry.suppliers.forEach(function(s){
+        if(s.items.length === 0) return;
+        html += '<div class="history-group-name">'+escapeHtml(s.name.toUpperCase())+'</div>';
+        s.items.forEach(function(it){
+          html += '<div class="history-item"><span>'+escapeHtml(it.ref)+'</span><span>×'+it.qty+'</span></div>';
+        });
+      });
+      html += '</div></div>';
+    });
+    wrap.innerHTML = html;
+  }
+  function exportHistoryCsv(entry){
+    var lines = [csvRow(['Fournisseur','Référence','Code','Quantité'])];
+    entry.suppliers.forEach(function(s){
+      s.items.forEach(function(it){
+        lines.push(csvRow([s.name, it.ref, it.code||'', it.qty]));
+      });
+    });
+    var blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv' });
+    var fname = 'historique_' + entry.date.slice(0,10) + '.csv';
+    downloadFile(fname, blob);
+  }
+  document.getElementById('historyList').addEventListener('click', function(e){
+    var row = e.target.closest('.history-row'); if(!row) return;
+    var id = row.getAttribute('data-id');
+    var entry = history.find(function(h){ return h.id === id; });
+    if(!entry) return;
+    var role = e.target.closest('[data-role]');
+    role = role ? role.getAttribute('data-role') : null;
+    if(role === 'exportHistoryCsv'){ exportHistoryCsv(entry); return; }
+    if(role === 'restoreHistory'){
+      openConfirm('Restaurer cette sauvegarde ?', 'Remplace la feuille actuelle par le contenu du ' + formatHistoryDate(entry.date) + '.', function(){
+        state.suppliers = JSON.parse(JSON.stringify(entry.suppliers));
+        state.activeSupplierId = null;
+        saveState(); renderAll();
+        document.getElementById('historyModal').classList.remove('show');
+        toast('Sauvegarde restaurée');
+      });
+      return;
+    }
+    if(role === 'deleteHistory'){
+      openConfirm('Supprimer cette sauvegarde ?', 'Cette action est définitive.', function(){
+        history = history.filter(function(h){ return h.id !== id; });
+        saveHistory();
+        renderHistoryList();
+        toast('Supprimé');
+      });
+      return;
+    }
+    // toggleHistory ou clic hors action : ouvre/ferme le détail
+    document.getElementById('historyDetail_'+id).classList.toggle('show');
+  });
+  document.getElementById('historyBtn').addEventListener('click', function(){
+    renderHistoryList();
+    document.getElementById('historyModal').classList.add('show');
+  });
+  document.getElementById('btnCloseHistory').addEventListener('click', function(){
+    document.getElementById('historyModal').classList.remove('show');
   });
 
   /* ================= Init ================= */
