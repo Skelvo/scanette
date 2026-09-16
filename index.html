@@ -1936,10 +1936,19 @@
   // désormais directement le cadre de la modale sur la zone réellement
   // visible (visualViewport), donc "coller en bas" la place juste au-dessus
   // du clavier sans double correction.
+  var vvSyncQueued = false;
   function syncVisualViewport(){
     if(!window.visualViewport) return;
-    document.documentElement.style.setProperty('--vv-top', window.visualViewport.offsetTop + 'px');
-    document.documentElement.style.setProperty('--vv-height', window.visualViewport.height + 'px');
+    // Coalescé sur une frame : ces évènements peuvent se déclencher en rafale
+    // (barre d'adresse qui se cache pendant un simple défilement), pas la
+    // peine d'écrire le style plus d'une fois par frame.
+    if(vvSyncQueued) return;
+    vvSyncQueued = true;
+    requestAnimationFrame(function(){
+      vvSyncQueued = false;
+      document.documentElement.style.setProperty('--vv-top', window.visualViewport.offsetTop + 'px');
+      document.documentElement.style.setProperty('--vv-height', window.visualViewport.height + 'px');
+    });
   }
   if(window.visualViewport){
     window.visualViewport.addEventListener('resize', syncVisualViewport);
@@ -1950,9 +1959,7 @@
   // Filet de sécurité anti-zoom : si la page se retrouve zoomée (double-tap,
   // ou tout autre geste qu'on n'a pas réussi à intercepter), on la remet
   // automatiquement à l'échelle normale au lieu de laisser l'utilisateur
-  // coincé à se déplacer dans une vue zoomée. Sans toucher au clavier
-  // touchend (qui cassait le défilement) : ceci est purement correctif,
-  // après coup.
+  // coincé à se déplacer dans une vue zoomée.
   var viewportMeta = document.querySelector('meta[name="viewport"]');
   var zoomResetPending = false;
   function resetZoomIfNeeded(){
@@ -1968,17 +1975,25 @@
       zoomResetPending = false;
     });
   }
-  if(window.visualViewport){
-    window.visualViewport.addEventListener('resize', resetZoomIfNeeded);
-    window.visualViewport.addEventListener('scroll', resetZoomIfNeeded);
+  // visualViewport déclenche resize/scroll bien plus souvent qu'un vrai zoom :
+  // sur mobile, la barre d'adresse qui se cache/réapparaît EN PLEIN DÉFILEMENT
+  // redimensionne aussi le visualViewport. Appeler resetZoomIfNeeded() en
+  // direct sur ces évènements (comme avant) rejouait exactement le bug qu'on
+  // pensait avoir corrigé en retirant le filet sur touchend : la réécriture
+  // du <meta viewport> tombait en plein milieu d'un flick et coupait le
+  // défilement (symptôme : "un coup sur deux, impossible de remonter"),
+  // juste déclenchée différemment. On ne vérifie donc plus qu'une fois le
+  // visualViewport stabilisé (aucun resize/scroll depuis 200ms) — jamais
+  // pendant un défilement ou son inertie en cours.
+  var zoomCheckTimer = null;
+  function scheduleZoomCheck(){
+    clearTimeout(zoomCheckTimer);
+    zoomCheckTimer = setTimeout(resetZoomIfNeeded, 200);
   }
-  // Le filet "à chaque tap" (touchend) a été retiré : il réécrivait le
-  // <meta viewport> après CHAQUE toucher, y compris pendant un flick de
-  // défilement encore en cours d'inertie. Cette réécriture force le
-  // navigateur à recalculer sa mise en page et pouvait couper le
-  // défilement en plein milieu (symptôme : "un coup sur deux, impossible
-  // de remonter"). Les évènements resize/scroll de visualViewport suffisent :
-  // ils ne se déclenchent que sur un vrai changement d'échelle ou de cadrage.
+  if(window.visualViewport){
+    window.visualViewport.addEventListener('resize', scheduleZoomCheck);
+    window.visualViewport.addEventListener('scroll', scheduleZoomCheck);
+  }
 
   /* ================= Catalogue (voir/modifier toutes les correspondances) ================= */
   var catalogFilterText = '';
