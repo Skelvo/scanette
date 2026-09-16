@@ -298,7 +298,11 @@
   .sheet h2{ font-size:16px; margin:0 0 4px; }
   .sheet .sub{ font-size:12.5px; color:var(--text-dim); margin:0 0 16px; }
   .scanned-code{ font-family:var(--font-mono); font-size:26px; font-weight:800; letter-spacing:.3px; color:var(--accent); margin:2px 0 8px; word-break:break-all; }
-  .field{ width:100%; background:var(--surface-2); border:1px solid var(--line); color:var(--text); border-radius:var(--radius-sm); padding:12px 13px; font-size:14px; margin-bottom:10px; }
+  /* font-size >= 16px : sous ce seuil, iOS zoome automatiquement la page à
+     la mise au point d'un champ de saisie, et notre filet de sécurité ne
+     rattrape pas toujours ce zoom-là (déclenché par le clavier, pas un
+     geste). Le vrai correctif est d'empêcher le zoom à la source. */
+  .field{ width:100%; background:var(--surface-2); border:1px solid var(--line); color:var(--text); border-radius:var(--radius-sm); padding:12px 13px; font-size:16px; margin-bottom:10px; }
   .field:focus{ outline:none; border-color:var(--accent); }
   .btn-primary{ width:100%; background:var(--accent); color:var(--accent-ink); border:none; border-radius:var(--radius-sm); padding:13px; font-weight:700; font-size:14px; }
   .btn-secondary{ width:100%; background:var(--surface-2); border:1px solid var(--line); color:var(--text); border-radius:var(--radius-sm); padding:12px; font-size:13.5px; font-weight:600; margin-top:8px; }
@@ -468,7 +472,7 @@
         <p><b>Catalogue</b> : voir, renommer, supprimer ou ajouter à la main toutes les correspondances code-barres → référence connues sur cet appareil.</p>
         <p><b>Historique</b> : chaque "Vider" garde une sauvegarde datée, consultable, exportable en CSV, ou restaurable sur la feuille en cours.</p>
         <p><b>Prénom</b> : sert à savoir qui a compté quoi (affiché sur les lignes et dans les exports), et à voir qui d'autre a l'app ouverte en même temps. <button id="btnChangeUserName" style="display:inline; background:none; border:none; padding:0; margin:0; font-size:12.5px; font-family:inherit; color:var(--accent); font-weight:700;">Ton prénom : <span id="userNameDisplay">(non défini)</span> — toucher pour changer</button></p>
-        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v17 — 16/09 22:30</b></p>
+        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v18 — 16/09 23:05</b></p>
       </div>
     </div>
   </main>
@@ -667,11 +671,13 @@
     var el = document.getElementById('userNameDisplay');
     if(el) el.textContent = currentUser || '(non défini)';
   }
-  function askUserName(){
+  function askUserName(onDone){
     askInput('Ton prénom (pour savoir qui a compté quoi)', currentUser, 'text').then(function(val){
-      if(val === null) return;
-      setCurrentUser(val);
-      toast(currentUser ? 'Prénom enregistré : ' + currentUser : 'Prénom effacé');
+      if(val !== null){
+        setCurrentUser(val);
+        toast(currentUser ? 'Prénom enregistré : ' + currentUser : 'Prénom effacé');
+      }
+      if(onDone) onDone();
     });
   }
 
@@ -904,8 +910,12 @@
       }
       if(firstPinEntry === pinBuffer){
         try{ localStorage.setItem(PIN_KEY, pinBuffer); }catch(e){}
-        unlock();
-        if(!currentUser) setTimeout(askUserName, 400);
+        // On demande le prénom ICI, encore sur l'écran du code : le
+        // demander après unlock() faisait apparaître la question flottant
+        // sur l'écran principal déjà affiché, ce qui déroutait plus qu'autre
+        // chose.
+        if(!currentUser) setTimeout(function(){ askUserName(unlock); }, 300);
+        else unlock();
       } else {
         firstPinEntry = '';
         pinBuffer = '';
