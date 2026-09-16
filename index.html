@@ -117,8 +117,8 @@
     border-bottom:1px solid var(--line); padding:14px 16px 12px;
   }
   .brand-row{ display:flex; align-items:center; justify-content:space-between; }
-  .brand{ display:flex; align-items:center; gap:9px; font-size:19px; font-weight:700; }
-  .brand .mark{ font-size:20px; }
+  .brand{ display:flex; align-items:center; gap:9px; font-size:19px; font-weight:700; line-height:1; }
+  .brand .mark{ font-size:22px; line-height:1; }
   .head-actions{ display:flex; align-items:center; gap:6px; }
   .icon-btn{
     width:34px; height:34px; border-radius:50%; border:1px solid var(--line);
@@ -231,11 +231,12 @@
 
   /* ---------- Modals ---------- */
   .modal-backdrop{
-    position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:100; display:none;
+    position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:180; display:none;
     align-items:flex-end; justify-content:center;
+    padding-bottom:var(--kb-offset,0px); transition:padding-bottom .15s;
   }
   .modal-backdrop.show{ display:flex; }
-  .modal-backdrop.center{ align-items:center; padding:20px; }
+  .modal-backdrop.center{ align-items:center; padding:20px; padding-bottom:20px; }
   .sheet{
     width:100%; max-width:560px; background:var(--surface); border-radius:16px 16px 0 0;
     padding:18px 18px calc(18px + env(safe-area-inset-bottom)); max-height:86vh; overflow-y:auto;
@@ -257,7 +258,7 @@
   #scanOverlay{ position:fixed; inset:0; z-index:150; background:#000; display:none; flex-direction:column; }
   #scanOverlay.show{ display:flex; }
   #interactive{ position:relative; flex:1; overflow:hidden; }
-  #interactive video, #interactive canvas{ position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); min-width:100%; min-height:100%; }
+  #interactive video, #interactive canvas{ position:absolute; top:50%; left:50%; transform:translate(-50%,-50%) scale(var(--zoom,1)); transition:transform .1s; min-width:100%; min-height:100%; }
   .scan-frame{
     position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
     width:78%; max-width:340px; height:130px; border:2px solid var(--accent); border-radius:14px;
@@ -269,9 +270,16 @@
   .scan-top .torch{ width:38px; height:38px; border-radius:50%; background:rgba(0,0,0,.5); border:none; color:#fff; font-size:15px; display:none; }
   .scan-top .torch.active{ background:var(--accent); color:var(--accent-ink); }
   .scan-top .mode-label{ background:rgba(0,0,0,.5); color:#fff; padding:8px 14px; border-radius:20px; font-size:12.5px; font-family:var(--font-mono); }
-  .scan-bottom{ position:absolute; bottom:0; left:0; right:0; padding:20px; text-align:center; z-index:2; }
-  .scan-bottom p{ color:#fff; font-size:12.5px; margin:0 0 12px; opacity:.8; }
+  .zoom-ctrl{ position:absolute; right:10px; top:50%; transform:translateY(-50%); z-index:2; display:flex; flex-direction:column; align-items:center; gap:6px; background:rgba(0,0,0,.5); border-radius:20px; padding:10px 6px; }
+  .zoom-ctrl button{ width:28px; height:28px; border-radius:50%; background:rgba(255,255,255,.15); border:none; color:#fff; font-size:15px; line-height:1; }
+  .zoom-ctrl input[type=range]{ writing-mode:vertical-lr; direction:rtl; width:6px; height:90px; accent-color:var(--accent); }
+  .scan-bottom{ position:absolute; bottom:0; left:0; right:0; padding:16px 20px; text-align:center; z-index:2; }
+  .scan-bottom p{ color:#fff; font-size:12.5px; margin:0 0 10px; opacity:.8; }
   .scan-manual{ background:rgba(0,0,0,.5); border:none; color:#fff; font-size:12.5px; padding:10px 18px; border-radius:20px; font-family:var(--font-display); }
+  .quick-qty{ display:none; align-items:center; gap:6px; justify-content:center; flex-wrap:wrap; background:rgba(0,0,0,.65); border:1px solid rgba(255,255,255,.2); border-radius:14px; padding:10px 12px; margin-bottom:10px; }
+  .quick-qty .lbl{ width:100%; color:#fff; font-size:12.5px; font-weight:600; margin-bottom:2px; }
+  .quick-qty button{ background:rgba(255,255,255,.15); border:none; color:#fff; font-size:12.5px; font-weight:700; padding:7px 12px; border-radius:20px; font-family:var(--font-mono); }
+  .quick-qty button:active{ background:var(--accent); color:var(--accent-ink); }
   .scan-flash{ position:absolute; inset:0; background:var(--accent); opacity:0; pointer-events:none; z-index:3; }
   .scan-flash.hit{ animation:flash .3s; }
   @keyframes flash{ 0%{opacity:.5;} 100%{opacity:0;} }
@@ -386,7 +394,19 @@
   </div>
   <div id="interactive"><video id="scanVideo" autoplay playsinline muted></video><div class="scan-flash" id="scanFlash"></div></div>
   <div class="scan-frame"></div>
+  <div class="zoom-ctrl" id="zoomCtrl">
+    <button id="zoomIn">+</button>
+    <input type="range" id="zoomRange" min="1" max="3" step="0.1" value="1">
+    <button id="zoomOut">−</button>
+  </div>
   <div class="scan-bottom">
+    <div class="quick-qty" id="quickQty">
+      <div class="lbl" id="quickQtyLabel"></div>
+      <button data-add="2">+2</button>
+      <button data-add="5">+5</button>
+      <button data-add="10">+10</button>
+      <button id="quickQtyCustom">✎ Autre</button>
+    </div>
     <p id="scanHint">Cadre le code-barres dans la zone</p>
     <button class="scan-manual" id="btnManualCode">⌨️ Code illisible — saisir les chiffres</button>
   </div>
@@ -763,10 +783,13 @@
     var supplier = state.activeSupplierId ? getSupplier(state.activeSupplierId) : ensureUngrouped();
     if(!supplier){ supplier = ensureUngrouped(); }
     var existing = supplier.items.find(function(it){ return code ? it.code === code : it.ref.toLowerCase() === refName.toLowerCase(); });
+    var item;
     if(existing){
       existing.qty += scanStep;
+      item = existing;
     } else {
-      supplier.items.push({ id: uid(), ref: refName, code: code || null, qty: scanStep });
+      item = { id: uid(), ref: refName, code: code || null, qty: scanStep };
+      supplier.items.push(item);
     }
     if(code && catalog[code] !== refName){
       catalog[code] = refName;
@@ -775,20 +798,58 @@
     }
     saveState();
     renderAll();
+    return { supplier: supplier, item: item };
   }
 
   function handleScannedCode(code){
     var known = findItemByCode(code);
     if(known || catalog[code]){
       var refName = known ? known.item.ref : catalog[code];
-      addOrIncrement(refName, code);
+      var res = addOrIncrement(refName, code);
       flashScan(true);
-      toast('✓ ' + refName + '  +' + scanStep);
+      showQuickQty(res.supplier.id, res.item.id);
     } else {
       flashScan(false);
       openRefModal(code);
     }
   }
+
+  /* ================= Pastille "quantité rapide" après un scan ================= */
+  var quickQtyTarget = null; // {supplierId, itemId}
+  var quickQtyTimer = null;
+  function showQuickQty(supplierId, itemId){
+    quickQtyTarget = { supplierId: supplierId, itemId: itemId };
+    var supplier = getSupplier(supplierId);
+    var item = supplier && supplier.items.find(function(it){ return it.id === itemId; });
+    if(!item) return;
+    document.getElementById('quickQtyLabel').textContent = '✓ ' + item.ref + '  ·  qté ' + item.qty;
+    var el = document.getElementById('quickQty');
+    el.style.display = 'flex';
+    clearTimeout(quickQtyTimer);
+    quickQtyTimer = setTimeout(function(){ el.style.display = 'none'; }, 5000);
+  }
+  function adjustQuickQty(n){
+    if(!quickQtyTarget) return;
+    var supplier = getSupplier(quickQtyTarget.supplierId);
+    var item = supplier && supplier.items.find(function(it){ return it.id === quickQtyTarget.itemId; });
+    if(!item) return;
+    item.qty = Math.max(0, item.qty + n);
+    saveState(); renderAll();
+    document.getElementById('quickQtyLabel').textContent = '✓ ' + item.ref + '  ·  qté ' + item.qty;
+    clearTimeout(quickQtyTimer);
+    quickQtyTimer = setTimeout(function(){ document.getElementById('quickQty').style.display = 'none'; }, 5000);
+  }
+  document.getElementById('quickQty').addEventListener('click', function(e){
+    var btn = e.target.closest('button'); if(!btn) return;
+    var addN = btn.getAttribute('data-add');
+    if(addN){ adjustQuickQty(parseInt(addN, 10)); return; }
+    if(btn.id === 'quickQtyCustom'){
+      var nv = prompt('Ajouter combien de pièces ?', '1');
+      if(nv === null) return;
+      nv = parseInt(nv, 10);
+      if(!isNaN(nv) && nv !== 0) adjustQuickQty(nv);
+    }
+  });
 
   /* ================= Scanner (BarcodeDetector natif, fallback ZXing) ================= */
   var $overlay = document.getElementById('scanOverlay');
@@ -797,6 +858,9 @@
   var codeReader = null; // lazy ZXing.BrowserMultiFormatReader
   var detectBusy = false;
   var torchOn = false;
+  // Vrai pendant que la modale "référence inconnue" est ouverte par-dessus la
+  // caméra, pour ne pas la rouvrir en boucle sur le même code déjà en attente.
+  var scanningPaused = false;
   // Haute résolution demandée : un petit code-barres ou une portion abîmée ne tient
   // que sur quelques pixels en basse résolution, ce qui le rend indécodable au
   // moindre défaut d'impression. Plus de pixels par barre = plus de marge d'erreur.
@@ -832,9 +896,9 @@
         scanState.mode = 'native';
         scanState.stream = stream;
         video.srcObject = stream;
-        setupTorchButton(stream.getVideoTracks()[0]);
+        setupCameraControls(stream.getVideoTracks()[0]);
         scanState.timer = setInterval(function(){
-          if(detectBusy) return;
+          if(detectBusy || scanningPaused) return;
           detectBusy = true;
           barcodeDetector.detect(video).then(function(codes){
             detectBusy = false;
@@ -882,10 +946,10 @@
         codeReader.decodeFromConstraints(
           { video: SCAN_CONSTRAINTS },
           video,
-          function(result){ if(result) onDetectedCode(result.getText()); }
+          function(result){ if(result && !scanningPaused) onDetectedCode(result.getText()); }
         ).then(function(){
           var track = video.srcObject && video.srcObject.getVideoTracks()[0];
-          if(track) setupTorchButton(track);
+          if(track) setupCameraControls(track);
         }).catch(function(err){ toast('Impossible d\'accéder à la caméra'); console.error(err); });
       }catch(e){ toast('Scanner indisponible'); console.error(e); }
     });
@@ -893,17 +957,37 @@
 
   // Flash/torche : très utile sur étiquettes brillantes, sombres ou mal éclairées.
   // Le bouton reste caché si l'appareil ne l'expose pas (iPhone Safari, notamment).
-  function setupTorchButton(track){
+  // Zoom : un vrai zoom matériel (Android/Chrome) quand disponible, sinon un
+  // zoom "visuel" par agrandissement de l'image caméra (aide au cadrage,
+  // fonctionne partout y compris iPhone qui n'expose pas de zoom matériel au web).
+  function setupCameraControls(track){
     var btn = document.getElementById('btnTorch');
     var caps = track && track.getCapabilities ? track.getCapabilities() : {};
-    if(!track || !caps.torch){ btn.style.display = 'none'; return; }
-    btn.style.display = 'flex';
-    btn.onclick = function(){
-      torchOn = !torchOn;
-      track.applyConstraints({ advanced: [{ torch: torchOn }] }).then(function(){
-        btn.classList.toggle('active', torchOn);
-      }).catch(function(){ torchOn = false; toast('Flash indisponible'); });
+    if(!track || !caps.torch){ btn.style.display = 'none'; }
+    else{
+      btn.style.display = 'flex';
+      btn.onclick = function(){
+        torchOn = !torchOn;
+        track.applyConstraints({ advanced: [{ torch: torchOn }] }).then(function(){
+          btn.classList.toggle('active', torchOn);
+        }).catch(function(){ torchOn = false; toast('Flash indisponible'); });
+      };
+    }
+
+    var range = document.getElementById('zoomRange');
+    var hwZoom = caps.zoom && caps.zoom.max > caps.zoom.min ? caps.zoom : null;
+    range.value = 1;
+    document.getElementById('scanVideo').style.setProperty('--zoom', 1);
+    range.oninput = function(){
+      var v = parseFloat(range.value);
+      document.getElementById('scanVideo').style.setProperty('--zoom', v);
+      if(hwZoom && track){
+        var hw = hwZoom.min + (v - 1) / 2 * (hwZoom.max - hwZoom.min);
+        track.applyConstraints({ advanced: [{ zoom: hw }] }).catch(function(){});
+      }
     };
+    document.getElementById('zoomIn').onclick = function(){ range.value = Math.min(3, parseFloat(range.value) + 0.3); range.oninput(); };
+    document.getElementById('zoomOut').onclick = function(){ range.value = Math.max(1, parseFloat(range.value) - 0.3); range.oninput(); };
   }
 
   function onDetectedCode(code){
@@ -921,11 +1005,16 @@
     if(scanState.stream){ scanState.stream.getTracks().forEach(function(t){ t.stop(); }); scanState.stream = null; }
     if(codeReader){ try{ codeReader.reset(); }catch(e){} }
     var video = document.getElementById('scanVideo');
-    if(video) video.srcObject = null;
+    if(video){ video.srcObject = null; video.style.setProperty('--zoom', 1); }
     var btnTorch = document.getElementById('btnTorch');
     btnTorch.style.display = 'none';
     btnTorch.classList.remove('active');
     torchOn = false;
+    document.getElementById('zoomRange').value = 1;
+    document.getElementById('quickQty').style.display = 'none';
+    clearTimeout(quickQtyTimer);
+    quickQtyTarget = null;
+    scanningPaused = false;
     scanState.mode = null;
   }
   document.getElementById('btnScan').addEventListener('click', startScan);
@@ -949,6 +1038,7 @@
   /* ================= Référence inconnue modal ================= */
   var $refModal = document.getElementById('refModal');
   function openRefModal(code){
+    scanningPaused = true;
     pendingCode = code;
     document.getElementById('refModalSub').textContent = 'Code ' + code + ' — touche une référence proche ou tape-la.';
     document.getElementById('refInput').value = '';
@@ -968,11 +1058,17 @@
   document.getElementById('btnConfirmRef').addEventListener('click', function(){
     var val = normalizeRef(document.getElementById('refInput').value);
     if(!val){ toast('Entre un nom de référence'); return; }
-    addOrIncrement(val, pendingCode);
+    var res = addOrIncrement(val, pendingCode);
     $refModal.classList.remove('show');
-    toast('✓ ' + val + ' ajouté');
+    scanningPaused = false;
+    lastDetected = { code: null, t: 0 };
+    showQuickQty(res.supplier.id, res.item.id);
   });
-  document.getElementById('btnSkipRef').addEventListener('click', function(){ $refModal.classList.remove('show'); });
+  document.getElementById('btnSkipRef').addEventListener('click', function(){
+    $refModal.classList.remove('show');
+    scanningPaused = false;
+    lastDetected = { code: null, t: 0 };
+  });
   document.getElementById('btnSearchOnline').addEventListener('click', function(){
     if(pendingCode) window.open('https://www.google.com/search?q=' + encodeURIComponent(pendingCode), '_blank');
   });
@@ -1278,6 +1374,17 @@
     };
     reader.readAsText(file);
   });
+
+  /* ================= Clavier virtuel : remonter les modales au-dessus ================= */
+  // iOS ne redimensionne pas la page quand le clavier s'ouvre : on décale les
+  // feuilles modales (bottom sheets) de la hauteur du clavier via visualViewport,
+  // sinon le champ de saisie reste caché derrière.
+  if(window.visualViewport){
+    window.visualViewport.addEventListener('resize', function(){
+      var kb = Math.max(0, window.innerHeight - window.visualViewport.height - window.visualViewport.offsetTop);
+      document.documentElement.style.setProperty('--kb-offset', kb + 'px');
+    });
+  }
 
   /* ================= Init ================= */
   renderPinDots();
