@@ -260,8 +260,9 @@
   .tb-grid button{
     background:var(--surface-2); border:1px solid var(--line); color:var(--text); border-radius:var(--radius-sm);
     padding:10px 4px; font-size:11.5px; display:flex; flex-direction:column; align-items:center; gap:4px;
+    min-width:0; max-width:100%; overflow:hidden; box-sizing:border-box;
   }
-  .tb-grid-5 button{ font-size:10px; padding:9px 2px; }
+  .tb-grid-5 button{ font-size:9.5px; padding:9px 1px; white-space:nowrap; text-overflow:ellipsis; }
   .tb-grid button .ic{ font-size:15px; }
   .selection-bar{
     display:none; align-items:center; gap:10px; background:var(--accent-dim); border:1px solid var(--accent);
@@ -1805,6 +1806,29 @@
       kb = Math.max(0, Math.min(kb, window.innerHeight * 0.45));
       document.documentElement.style.setProperty('--kb-offset', kb + 'px');
     });
+  }
+
+  // Filet de sécurité anti-zoom : si la page se retrouve zoomée (double-tap,
+  // ou tout autre geste qu'on n'a pas réussi à intercepter), on la remet
+  // automatiquement à l'échelle normale au lieu de laisser l'utilisateur
+  // coincé à se déplacer dans une vue zoomée. Sans toucher au clavier
+  // touchend (qui cassait le défilement) : ceci est purement correctif,
+  // après coup.
+  var viewportMeta = document.querySelector('meta[name="viewport"]');
+  var zoomResetPending = false;
+  function resetZoomIfNeeded(){
+    if(!window.visualViewport || window.visualViewport.scale <= 1.02 || zoomResetPending) return;
+    zoomResetPending = true;
+    var original = viewportMeta.getAttribute('content');
+    viewportMeta.setAttribute('content', original + ', maximum-scale=1.0');
+    requestAnimationFrame(function(){
+      viewportMeta.setAttribute('content', original);
+      zoomResetPending = false;
+    });
+  }
+  if(window.visualViewport){
+    window.visualViewport.addEventListener('resize', resetZoomIfNeeded);
+    window.visualViewport.addEventListener('scroll', resetZoomIfNeeded);
   }
 
   /* ================= Catalogue (voir/modifier toutes les correspondances) ================= */
