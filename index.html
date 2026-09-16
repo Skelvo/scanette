@@ -72,7 +72,7 @@
   }
 
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
-  html,body{height:100%; overflow-x:hidden; touch-action:pan-y;}
+  html,body{height:100%; overflow-x:hidden; touch-action:pan-y; overscroll-behavior-y:contain;}
   body{
     margin:0; background:var(--bg); color:var(--text);
     font-family:var(--font-display);
@@ -281,16 +281,17 @@
 
   /* ---------- Modals ---------- */
   .modal-backdrop{
-    position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:180; display:none;
+    position:fixed; left:0; width:100%; top:var(--vv-top,0px); height:var(--vv-height,100%);
+    background:rgba(0,0,0,.6); z-index:180; display:none;
     align-items:flex-end; justify-content:center;
   }
   .modal-backdrop.show{ display:flex; }
   .modal-backdrop.center{ align-items:center; padding:20px; }
   .sheet{
     width:100%; max-width:560px; background:var(--surface); border-radius:16px 16px 0 0;
-    padding:18px 18px calc(18px + env(safe-area-inset-bottom)); max-height:86vh;
-    overflow-y:auto; overflow-x:hidden; box-sizing:border-box;
-    transform:translateY(calc(-1 * var(--kb-offset,0px))); transition:transform .15s;
+    padding:18px 18px calc(18px + env(safe-area-inset-bottom));
+    max-height:min(86vh, var(--vv-height, 86vh));
+    overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain; box-sizing:border-box;
   }
   .modal-backdrop.center .sheet{ border-radius:16px; max-height:80vh; }
   .sheet h2{ font-size:16px; margin:0 0 4px; }
@@ -300,10 +301,10 @@
   .field:focus{ outline:none; border-color:var(--accent); }
   .btn-primary{ width:100%; background:var(--accent); color:var(--accent-ink); border:none; border-radius:var(--radius-sm); padding:13px; font-weight:700; font-size:14px; }
   .btn-secondary{ width:100%; background:var(--surface-2); border:1px solid var(--line); color:var(--text); border-radius:var(--radius-sm); padding:12px; font-size:13.5px; font-weight:600; margin-top:8px; }
-  .candidate-list{ display:flex; flex-direction:column; gap:6px; margin-bottom:12px; max-height:160px; overflow-y:auto; overflow-x:hidden; }
+  .candidate-list{ display:flex; flex-direction:column; gap:6px; margin-bottom:12px; max-height:160px; overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain; }
   .candidate{ text-align:left; background:var(--surface-2); border:1px solid var(--line); color:var(--text); border-radius:var(--radius-sm); padding:10px 12px; font-family:var(--font-mono); font-size:13px; font-weight:600; }
   .candidate:active{ background:var(--surface-3); }
-  .move-list{ display:flex; flex-direction:column; gap:6px; margin-bottom:6px; max-height:220px; overflow-y:auto; overflow-x:hidden; }
+  .move-list{ display:flex; flex-direction:column; gap:6px; margin-bottom:6px; max-height:220px; overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain; }
   .move-list button{ text-align:left; background:var(--surface-2); border:1px solid var(--line); color:var(--text); border-radius:var(--radius-sm); padding:11px 12px; font-size:13.5px; font-weight:600; display:flex; align-items:center; gap:8px; }
   .supplier-row{ display:flex; align-items:stretch; gap:6px; }
   .supplier-row button[data-activate]{ flex:1; min-width:0; }
@@ -1890,19 +1891,25 @@
     reader.readAsText(file);
   });
 
-  /* ================= Clavier virtuel : remonter les modales au-dessus ================= */
-  // iOS ne redimensionne pas la page quand le clavier s'ouvre : on décale les
-  // feuilles modales (bottom sheets) de la hauteur du clavier via visualViewport,
-  // sinon le champ de saisie reste caché derrière.
+  /* ================= Clavier virtuel : caler les modales sur la zone visible ================= */
+  // iOS/Chrome mobile ne redimensionnent pas la page quand le clavier s'ouvre,
+  // et le navigateur fait lui-même défiler la page pour amener le champ actif
+  // à l'écran. Un ancien correctif décalait la feuille modale avec un
+  // transform basé sur une estimation de la hauteur du clavier : ce décalage
+  // s'additionnait à celui déjà fait par le navigateur et pouvait pousser la
+  // feuille entière hors de l'écran (invisible pendant la saisie). On cale
+  // désormais directement le cadre de la modale sur la zone réellement
+  // visible (visualViewport), donc "coller en bas" la place juste au-dessus
+  // du clavier sans double correction.
+  function syncVisualViewport(){
+    if(!window.visualViewport) return;
+    document.documentElement.style.setProperty('--vv-top', window.visualViewport.offsetTop + 'px');
+    document.documentElement.style.setProperty('--vv-height', window.visualViewport.height + 'px');
+  }
   if(window.visualViewport){
-    window.visualViewport.addEventListener('resize', function(){
-      var kb = window.innerHeight - window.visualViewport.height - window.visualViewport.offsetTop;
-      // Plafond de sécurité : un vrai clavier iOS ne dépasse jamais ~45% de la
-      // hauteur d'écran. Si le calcul dérape (évènement transitoire pendant
-      // l'animation du clavier), on ne pousse jamais la fenêtre hors champ.
-      kb = Math.max(0, Math.min(kb, window.innerHeight * 0.45));
-      document.documentElement.style.setProperty('--kb-offset', kb + 'px');
-    });
+    window.visualViewport.addEventListener('resize', syncVisualViewport);
+    window.visualViewport.addEventListener('scroll', syncVisualViewport);
+    syncVisualViewport();
   }
 
   // Filet de sécurité anti-zoom : si la page se retrouve zoomée (double-tap,
@@ -1930,10 +1937,13 @@
     window.visualViewport.addEventListener('resize', resetZoomIfNeeded);
     window.visualViewport.addEventListener('scroll', resetZoomIfNeeded);
   }
-  // Filet supplémentaire : vérifie aussi à chaque tap (passif, ne bloque
-  // jamais le défilement) — couvre le cas où aucun resize/scroll du
-  // visualViewport ne se déclenche juste après la fermeture d'une fenêtre.
-  document.addEventListener('touchend', resetZoomIfNeeded, { passive: true });
+  // Le filet "à chaque tap" (touchend) a été retiré : il réécrivait le
+  // <meta viewport> après CHAQUE toucher, y compris pendant un flick de
+  // défilement encore en cours d'inertie. Cette réécriture force le
+  // navigateur à recalculer sa mise en page et pouvait couper le
+  // défilement en plein milieu (symptôme : "un coup sur deux, impossible
+  // de remonter"). Les évènements resize/scroll de visualViewport suffisent :
+  // ils ne se déclenchent que sur un vrai changement d'échelle ou de cadrage.
 
   /* ================= Catalogue (voir/modifier toutes les correspondances) ================= */
   var catalogFilterText = '';
