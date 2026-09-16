@@ -132,7 +132,7 @@
   }
   .sync-dot.on{ border-color:var(--success); color:var(--success); }
   .sync-dot.off{ border-color:var(--text-faint); color:var(--text-faint); }
-  .stat-row{ display:flex; align-items:baseline; gap:16px; margin-top:8px; }
+  .stat-row{ display:flex; align-items:baseline; gap:16px; margin-top:8px; flex-wrap:wrap; row-gap:4px; }
   .stat-row .n{ font-family:var(--font-mono); font-weight:700; font-size:15px; color:var(--accent); }
   .stat-row .lbl{ font-size:12px; color:var(--text-dim); }
 
@@ -197,6 +197,10 @@
   .qty-stepper{ display:flex; align-items:center; gap:0; background:var(--surface-2); border:1px solid var(--line); border-radius:9px; flex-shrink:0; }
   .qty-stepper button{ width:36px; height:36px; background:transparent; border:none; color:var(--text); font-size:19px; }
   .qty-stepper .q{ font-family:var(--font-mono); font-weight:800; font-size:20px; min-width:34px; text-align:center; }
+  .price-tag{ display:block; margin:3px 0; padding:2px 8px; border:1px dashed var(--line); border-radius:10px; font-size:10.5px; color:var(--accent); background:none; font-family:var(--font-mono); width:fit-content; }
+  .price-tag.set{ border-style:solid; border-color:var(--line); color:var(--text-dim); }
+  .row-icon-btn{ background:none; border:none; color:var(--text-faint); font-size:15px; padding:6px; flex-shrink:0; }
+  .row-icon-btn:active{ color:var(--text); }
 
   .empty-state{ text-align:center; padding:40px 20px; color:var(--text-faint); }
   .empty-state .big{ font-size:30px; margin-bottom:8px; }
@@ -206,6 +210,19 @@
   .help-toggle .q{ width:22px; height:22px; border-radius:50%; background:var(--surface-2); display:flex; align-items:center; justify-content:center; font-size:12px; color:var(--text-dim); }
   .help-body{ font-size:12.5px; color:var(--text-dim); line-height:1.7; margin-top:10px; }
   .help-body b{ color:var(--text); }
+
+  /* ---------- Dernière action / Annuler ---------- */
+  .last-action-bar{
+    display:none; align-items:center; gap:10px; position:fixed; left:16px; right:16px;
+    bottom:calc(84px + env(safe-area-inset-bottom)); z-index:35; max-width:528px; margin:0 auto;
+    background:var(--surface-2); border:1px solid var(--accent); border-left:4px solid var(--accent);
+    border-radius:var(--radius); padding:10px 12px; box-shadow:0 6px 20px rgba(0,0,0,.35);
+  }
+  .last-action-bar.show{ display:flex; }
+  .laa-info{ flex:1; min-width:0; }
+  .laa-ref{ display:block; font-family:var(--font-mono); font-weight:700; font-size:14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .laa-delta{ display:block; font-size:11.5px; color:var(--text-dim); margin-top:1px; }
+  .last-action-bar button{ background:var(--surface); border:1px solid var(--line); color:var(--text); border-radius:8px; padding:8px 12px; font-size:12.5px; font-weight:600; flex-shrink:0; }
 
   /* ---------- Bottom toolbar ---------- */
   .toolbar{
@@ -326,6 +343,7 @@
     <div class="stat-row">
       <div><span class="n" id="refCount">0</span> <span class="lbl">référence(s)</span></div>
       <div><span class="n" id="totalQty">0</span> <span class="lbl">pièces scannées</span></div>
+      <div id="valueStat" style="display:none;"><span class="n" id="totalValueEl">0 €</span> <span class="lbl">valeur stock</span></div>
     </div>
   </header>
 
@@ -355,6 +373,8 @@
       <button id="btnCancelSel">Annuler</button>
     </div>
 
+    <input class="field" id="listFilter" style="margin-bottom:12px;" placeholder="🔍 Filtrer les références...">
+
     <div id="groupsWrap"></div>
 
     <div class="panel">
@@ -367,10 +387,21 @@
         <p><b>▶ Scan</b> : codes-barres / QR. Nouveau produit → l'app propose une référence. Produit connu → +1 (ou +N) direct.</p>
         <p><b>📷</b> : référence écrite sans code-barres, saisie manuelle en série.</p>
         <p>Touche le chiffre de quantité d'une ligne pour la saisir directement.</p>
+        <p><b>+ prix</b> : touche le tag sous une référence pour lui donner un prix unitaire — la valeur totale du stock s'affiche alors en haut, et dans les exports.</p>
+        <p><b>✎ / ✕</b> : renommer ou supprimer une référence directement depuis la ligne.</p>
+        <p><b>↩ Annuler</b> apparaît après chaque scan ou changement de quantité, pour revenir en arrière en un geste.</p>
         <p><b>☁️</b> : le catalogue code-barres → référence est partagé avec toute l'équipe en temps réel. Dès que quelqu'un identifie un code, tout le monde le voit. Les quantités et fournisseurs restent, eux, propres à cet appareil.</p>
       </div>
     </div>
   </main>
+
+  <div class="last-action-bar" id="lastActionBar">
+    <div class="laa-info">
+      <span class="laa-ref" id="laaRef"></span>
+      <span class="laa-delta" id="laaDelta"></span>
+    </div>
+    <button id="btnUndoLast">↩ Annuler</button>
+  </div>
 
   <div class="toolbar">
     <div class="toolbar-inner">
@@ -513,6 +544,7 @@
   var state = loadState();
   var catalog = loadCatalog(); // { code: refName } — local cache; source of truth is the shared db when connected
   var selected = new Set();
+  var listFilterText = '';
   var scanStep = 1;
   var pendingCode = null; // barcode awaiting reference choice
   var lastDetected = { code: null, t: 0 };
@@ -726,9 +758,23 @@
     state.suppliers.forEach(function(s){ t += s.items.length; });
     return t;
   }
+  function formatPrice(n){ return n.toFixed(2).replace('.', ',') + ' €'; }
+  function totalValue(){
+    var t = 0, any = false;
+    state.suppliers.forEach(function(s){ s.items.forEach(function(it){ if(it.price != null){ any = true; t += it.price * it.qty; } }); });
+    return any ? t : null;
+  }
   function renderHeader(){
     document.getElementById('refCount').textContent = totalRefs();
     document.getElementById('totalQty').textContent = totalQty();
+    var tv = totalValue();
+    var valueStat = document.getElementById('valueStat');
+    if(tv != null){
+      document.getElementById('totalValueEl').textContent = formatPrice(tv);
+      valueStat.style.display = '';
+    } else {
+      valueStat.style.display = 'none';
+    }
   }
   function renderSupplierBar(){
     var el = document.getElementById('supplierCurrent');
@@ -746,26 +792,44 @@
 
   function renderGroups(){
     var wrap = document.getElementById('groupsWrap');
-    var visible = state.suppliers.filter(function(s){ return s.items.length > 0; });
-    if(visible.length === 0){
-      wrap.innerHTML = '<div class="panel empty-state"><div class="big">📭</div><p>Aucune référence scannée pour l\'instant.<br>Lance le scan ou ajoute une référence texte.</p></div>';
+    var q = listFilterText.trim().toLowerCase();
+    var groups = state.suppliers.map(function(s){
+      var items = q ? s.items.filter(function(it){
+        return it.ref.toLowerCase().indexOf(q) !== -1 || (it.code && it.code.indexOf(q) !== -1);
+      }) : s.items;
+      return { supplier: s, items: items };
+    }).filter(function(g){ return g.items.length > 0; });
+
+    if(groups.length === 0){
+      wrap.innerHTML = q
+        ? '<div class="panel empty-state"><div class="big">🔍</div><p>Aucune référence ne correspond à "'+escapeHtml(listFilterText)+'".</p></div>'
+        : '<div class="panel empty-state"><div class="big">📭</div><p>Aucune référence scannée pour l\'instant.<br>Lance le scan ou ajoute une référence texte.</p></div>';
       updateSelectionBar();
       return;
     }
     var html = '';
-    visible.forEach(function(s){
+    groups.forEach(function(g){
+      var s = g.supplier;
       html += '<div class="group panel" data-supplier="'+s.id+'">';
-      html += '<div class="group-head"><span class="name">'+escapeHtml(s.name.toUpperCase())+'</span><span class="count">'+s.items.length+' réf.</span></div>';
-      s.items.forEach(function(it){
+      html += '<div class="group-head"><span class="name">'+escapeHtml(s.name.toUpperCase())+'</span><span class="count">'+g.items.length+' réf.</span></div>';
+      g.items.forEach(function(it){
         var checked = selected.has(it.id);
+        var priceLabel = it.price != null
+          ? formatPrice(it.price) + ' /u · ' + formatPrice(it.price * it.qty)
+          : '+ prix';
         html += '<div class="item-row" data-item="'+it.id+'" data-supplier="'+s.id+'">';
         html += '<div class="chk'+(checked?' on':'')+'" data-role="chk">'+(checked?'✓':'')+'</div>';
-        html += '<div class="ref"><div class="r1">'+escapeHtml(it.ref)+'</div><div class="r2">'+escapeHtml(it.code||'saisie manuelle')+'</div></div>';
+        html += '<div class="ref"><div class="r1">'+escapeHtml(it.ref)+'</div>';
+        html += '<button class="price-tag'+(it.price!=null?' set':'')+'" data-role="price">'+escapeHtml(priceLabel)+'</button>';
+        html += '<div class="r2">'+escapeHtml(it.code||'saisie manuelle')+'</div></div>';
         html += '<div class="qty-stepper">';
         html += '<button data-role="qdown">−</button>';
         html += '<div class="q" data-role="qval">'+it.qty+'</div>';
         html += '<button data-role="qup">+</button>';
-        html += '</div></div>';
+        html += '</div>';
+        html += '<button class="row-icon-btn" data-role="editRef" title="Renommer">✎</button>';
+        html += '<button class="row-icon-btn" data-role="deleteRef" title="Supprimer">✕</button>';
+        html += '</div>';
       });
       html += '</div>';
     });
@@ -812,13 +876,17 @@
     var supplier = state.activeSupplierId ? getSupplier(state.activeSupplierId) : ensureUngrouped();
     if(!supplier){ supplier = ensureUngrouped(); }
     var existing = supplier.items.find(function(it){ return code ? it.code === code : it.ref.toLowerCase() === refName.toLowerCase(); });
-    var item;
+    var item, wasNew, prevQty;
     if(existing){
+      prevQty = existing.qty;
       existing.qty += scanStep;
       item = existing;
+      wasNew = false;
     } else {
+      prevQty = 0;
       item = { id: uid(), ref: refName, code: code || null, qty: scanStep };
       supplier.items.push(item);
+      wasNew = true;
     }
     if(code && catalog[code] !== refName){
       catalog[code] = refName;
@@ -827,6 +895,7 @@
     }
     saveState();
     renderAll();
+    recordLastAction(supplier, item, wasNew, prevQty);
     return { supplier: supplier, item: item };
   }
 
@@ -862,12 +931,46 @@
     var supplier = getSupplier(quickQtyTarget.supplierId);
     var item = supplier && supplier.items.find(function(it){ return it.id === quickQtyTarget.itemId; });
     if(!item) return;
+    var prevQty = item.qty;
     item.qty = Math.max(0, item.qty + n);
     saveState(); renderAll();
     document.getElementById('quickQtyLabel').textContent = '✓ ' + item.ref + '  ·  qté ' + item.qty;
     clearTimeout(quickQtyTimer);
     quickQtyTimer = setTimeout(function(){ document.getElementById('quickQty').style.display = 'none'; }, 5000);
+    recordLastAction(supplier, item, false, prevQty);
   }
+
+  /* ================= Dernière action / Annuler ================= */
+  var lastAction = null; // {supplierId, itemId, wasNew, prevQty, delta}
+  var lastActionTimer = null;
+  function recordLastAction(supplier, item, wasNew, prevQty){
+    lastAction = { supplierId: supplier.id, itemId: item.id, wasNew: wasNew, prevQty: prevQty, delta: item.qty - prevQty };
+    document.getElementById('laaRef').textContent = item.ref;
+    document.getElementById('laaDelta').textContent = (lastAction.delta >= 0 ? '+' : '') + lastAction.delta + '  →  ×' + item.qty;
+    var bar = document.getElementById('lastActionBar');
+    bar.classList.add('show');
+    clearTimeout(lastActionTimer);
+    lastActionTimer = setTimeout(function(){ bar.classList.remove('show'); }, 6000);
+  }
+  function undoLastAction(){
+    if(!lastAction) return;
+    var supplier = getSupplier(lastAction.supplierId);
+    if(supplier){
+      if(lastAction.wasNew){
+        supplier.items = supplier.items.filter(function(it){ return it.id !== lastAction.itemId; });
+      } else {
+        var item = supplier.items.find(function(it){ return it.id === lastAction.itemId; });
+        if(item) item.qty = lastAction.prevQty;
+      }
+      saveState(); renderAll();
+    }
+    document.getElementById('lastActionBar').classList.remove('show');
+    document.getElementById('quickQty').style.display = 'none';
+    clearTimeout(quickQtyTimer);
+    toast('Annulé');
+    lastAction = null;
+  }
+  document.getElementById('btnUndoLast').addEventListener('click', undoLastAction);
   document.getElementById('quickQty').addEventListener('click', function(e){
     var btn = e.target.closest('button'); if(!btn) return;
     var addN = btn.getAttribute('data-add');
@@ -1217,11 +1320,20 @@
     var role = e.target.closest('[data-role]');
     role = role ? role.getAttribute('data-role') : null;
 
-    if(role === 'qup'){ item.qty += 1; saveState(); renderAll(); return; }
+    if(role === 'qup'){
+      var prevQtyUp = item.qty;
+      item.qty += 1;
+      saveState(); renderAll();
+      recordLastAction(supplier, item, false, prevQtyUp);
+      return;
+    }
     if(role === 'qdown'){
+      var prevQtyDown = item.qty;
       item.qty = Math.max(0, item.qty - 1);
       if(item.qty === 0){ supplier.items = supplier.items.filter(function(it){ return it.id !== itemId; }); }
-      saveState(); renderAll(); return;
+      saveState(); renderAll();
+      recordLastAction(supplier, item, false, prevQtyDown);
+      return;
     }
     if(role === 'qval'){
       askInput('Nouvelle quantité pour "' + item.ref + '"', String(item.qty), 'numeric').then(function(nv){
@@ -1234,9 +1346,46 @@
       });
       return;
     }
+    if(role === 'price'){
+      askInput('Prix unitaire pour "' + item.ref + '" (€)', item.price != null ? String(item.price).replace('.', ',') : '', 'decimal').then(function(val){
+        if(val === null) return;
+        val = val.trim().replace(',', '.');
+        if(val === ''){ item.price = null; }
+        else{
+          var p = parseFloat(val);
+          if(isNaN(p) || p < 0){ toast('Prix invalide'); return; }
+          item.price = p;
+        }
+        saveState(); renderAll();
+      });
+      return;
+    }
+    if(role === 'editRef'){
+      askInput('Renommer la référence', item.ref, 'text').then(function(val){
+        val = normalizeRef(val);
+        if(val === null || !val) return;
+        item.ref = val;
+        if(item.code){ catalog[item.code] = val; saveCatalog(); writeCatalogEntry(item.code, val); }
+        saveState(); renderAll();
+      });
+      return;
+    }
+    if(role === 'deleteRef'){
+      openConfirm('Supprimer cette référence ?', '"' + item.ref + '" sera retiré de la feuille.', function(){
+        supplier.items = supplier.items.filter(function(it){ return it.id !== itemId; });
+        saveState(); renderAll();
+        toast('Supprimé');
+      });
+      return;
+    }
     // default: toggle checkbox / selection
     if(selected.has(itemId)) selected.delete(itemId); else selected.add(itemId);
     renderGroups(); updateSelectionBar();
+  });
+
+  document.getElementById('listFilter').addEventListener('input', function(){
+    listFilterText = this.value;
+    renderGroups();
   });
 
   /* ================= Selection bar ================= */
@@ -1336,6 +1485,8 @@
       state.suppliers = [];
       state.activeSupplierId = null;
       selected.clear();
+      lastAction = null;
+      document.getElementById('lastActionBar').classList.remove('show');
       saveState(); renderAll();
       toast('Feuille vidée');
     });
@@ -1380,10 +1531,12 @@
 
   document.getElementById('btnCSV').addEventListener('click', function(){
     if(totalRefs() === 0){ toast('Rien à exporter'); return; }
-    var lines = [['Fournisseur','Référence','Code','Quantité'].join(';')];
+    var lines = [['Fournisseur','Référence','Code','Quantité','Prix unitaire','Total'].join(';')];
     state.suppliers.forEach(function(s){
       s.items.forEach(function(it){
-        lines.push([s.name, it.ref, it.code||'', it.qty].map(function(v){
+        var pu = it.price != null ? it.price.toFixed(2) : '';
+        var tot = it.price != null ? (it.price * it.qty).toFixed(2) : '';
+        lines.push([s.name, it.ref, it.code||'', it.qty, pu, tot].map(function(v){
           return '"' + String(v).replace(/"/g,'""') + '"';
         }).join(';'));
       });
@@ -1418,9 +1571,10 @@
       doc.setDrawColor(210); doc.line(14, y-4, 196, y-4);
       s.items.forEach(function(it){
         if(y > 280){ doc.addPage(); y = 18; }
-        var refLines = doc.splitTextToSize(it.ref, 150);
+        var refLines = doc.splitTextToSize(it.ref, 130);
         doc.text(refLines, 16, y);
-        doc.text(String(it.qty), 180, y, { align: 'right' });
+        doc.text(String(it.qty), 165, y, { align: 'right' });
+        if(it.price != null){ doc.text(formatPrice(it.price * it.qty), 196, y, { align: 'right' }); }
         y += 6 * refLines.length;
       });
       y += 4;
@@ -1428,6 +1582,11 @@
     y += 4;
     doc.setFont('helvetica','bold');
     doc.text('Total pièces scannées : ' + totalQty(), 14, Math.min(y, 285));
+    var tv = totalValue();
+    if(tv != null){
+      y += 6;
+      doc.text('Valeur totale du stock : ' + formatPrice(tv), 14, Math.min(y, 285));
+    }
     var d = new Date();
     var fname = 'scanette_' + d.toISOString().slice(0,10) + '.pdf';
     var blob = doc.output('blob');
