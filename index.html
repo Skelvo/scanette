@@ -468,6 +468,16 @@
   </div>
 </div>
 
+<!-- Saisie générique modal (remplace les prompt() natifs, peu fiables sur mobile) -->
+<div class="modal-backdrop center" id="inputModal">
+  <div class="sheet" style="border-radius:16px;">
+    <h2 id="inputModalTitle">Saisir</h2>
+    <input class="field" id="inputModalField" style="margin-top:12px;">
+    <button class="btn-primary" id="inputModalOk">OK</button>
+    <button class="btn-secondary" id="inputModalCancel">Annuler</button>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 <input type="file" id="jsonImportInput" accept="application/json">
 
@@ -844,10 +854,13 @@
     var addN = btn.getAttribute('data-add');
     if(addN){ adjustQuickQty(parseInt(addN, 10)); return; }
     if(btn.id === 'quickQtyCustom'){
-      var nv = prompt('Ajouter combien de pièces ?', '1');
-      if(nv === null) return;
-      nv = parseInt(nv, 10);
-      if(!isNaN(nv) && nv !== 0) adjustQuickQty(nv);
+      scanningPaused = true;
+      askInput('Ajouter combien de pièces ?', '1', 'numeric').then(function(nv){
+        scanningPaused = false;
+        if(nv === null) return;
+        nv = parseInt(nv, 10);
+        if(!isNaN(nv) && nv !== 0) adjustQuickQty(nv);
+      });
     }
   });
 
@@ -1052,12 +1065,15 @@
   // le papier — aucun algorithme ne la retrouve. On laisse taper les chiffres
   // imprimés sous les barres, qui restent lisibles même quand les barres ne le sont plus.
   document.getElementById('btnManualCode').addEventListener('click', function(){
-    var code = prompt('Chiffres imprimés sous le code-barres :');
-    if(code === null) return;
-    code = code.trim();
-    if(!code){ toast('Entre un code'); return; }
-    beep();
-    handleScannedCode(code);
+    scanningPaused = true;
+    askInput('Chiffres imprimés sous le code-barres', '', 'numeric').then(function(code){
+      scanningPaused = false;
+      if(code === null) return;
+      code = code.trim();
+      if(!code){ toast('Entre un code'); return; }
+      beep();
+      handleScannedCode(code);
+    });
   });
 
   /* ================= Stepper (scan multiplier) ================= */
@@ -1066,23 +1082,41 @@
 
   /* ================= Référence inconnue modal ================= */
   var $refModal = document.getElementById('refModal');
+  // Suggestions filtrées par ce qui est tapé, toujours limitées à quelques
+  // résultats : ça reste utilisable même avec un très gros catalogue, on
+  // n'affiche jamais "toutes les refs", juste les meilleures correspondances.
+  function renderRefCandidates(filterText, excludeCode){
+    var q = normalizeRef(filterText).toLowerCase();
+    var seen = {};
+    var matches = Object.keys(catalog)
+      .filter(function(c){ return c !== excludeCode; })
+      .map(function(c){ return catalog[c]; })
+      .filter(function(v){
+        var k = v.toLowerCase();
+        if(seen[k]) return false;
+        seen[k] = true;
+        return q ? k.indexOf(q) !== -1 : true;
+      })
+      .slice(0, 8);
+    var list = document.getElementById('candidateList');
+    list.innerHTML = matches.map(function(c){ return '<button class="candidate" data-ref="'+escapeHtml(c)+'">'+escapeHtml(c)+'</button>'; }).join('');
+  }
   function openRefModal(code){
     scanningPaused = true;
     pendingCode = code;
     document.getElementById('refModalSub').textContent = 'Code ' + code + ' — touche une référence proche ou tape-la.';
     document.getElementById('refInput').value = '';
-    var candidates = Object.keys(catalog).filter(function(c){ return c !== code; })
-      .map(function(c){ return catalog[c]; })
-      .filter(function(v, i, a){ return a.indexOf(v) === i; })
-      .slice(0, 6);
-    var list = document.getElementById('candidateList');
-    list.innerHTML = candidates.map(function(c){ return '<button class="candidate" data-ref="'+escapeHtml(c)+'">'+escapeHtml(c)+'</button>'; }).join('');
+    renderRefCandidates('', code);
     $refModal.classList.add('show');
     setTimeout(function(){ document.getElementById('refInput').focus(); }, 200);
   }
+  document.getElementById('refInput').addEventListener('input', function(){
+    renderRefCandidates(this.value, pendingCode);
+  });
   document.getElementById('candidateList').addEventListener('click', function(e){
     var b = e.target.closest('.candidate'); if(!b) return;
     document.getElementById('refInput').value = b.getAttribute('data-ref');
+    renderRefCandidates(b.getAttribute('data-ref'), pendingCode);
   });
   document.getElementById('btnConfirmRef').addEventListener('click', function(){
     var val = normalizeRef(document.getElementById('refInput').value);
@@ -1171,13 +1205,15 @@
       saveState(); renderAll(); return;
     }
     if(role === 'qval'){
-      var nv = prompt('Nouvelle quantité pour "' + item.ref + '"', item.qty);
-      if(nv === null) return;
-      nv = parseInt(nv, 10);
-      if(isNaN(nv) || nv < 0){ toast('Quantité invalide'); return; }
-      if(nv === 0){ supplier.items = supplier.items.filter(function(it){ return it.id !== itemId; }); }
-      else item.qty = nv;
-      saveState(); renderAll(); return;
+      askInput('Nouvelle quantité pour "' + item.ref + '"', String(item.qty), 'numeric').then(function(nv){
+        if(nv === null) return;
+        nv = parseInt(nv, 10);
+        if(isNaN(nv) || nv < 0){ toast('Quantité invalide'); return; }
+        if(nv === 0){ supplier.items = supplier.items.filter(function(it){ return it.id !== itemId; }); }
+        else item.qty = nv;
+        saveState(); renderAll();
+      });
+      return;
     }
     // default: toggle checkbox / selection
     if(selected.has(itemId)) selected.delete(itemId); else selected.add(itemId);
@@ -1243,6 +1279,36 @@
   });
   document.getElementById('confirmNo').addEventListener('click', function(){
     $confirmModal.classList.remove('show'); confirmCb = null;
+  });
+
+  /* ================= Saisie générique (remplace prompt()) ================= */
+  // Un prompt() natif bloque tout le JS, y compris la boucle de scan — mais il
+  // n'est pas stylé et se comporte de façon incohérente empilé avec nos propres
+  // fenêtres. Cette modale maison fait la même chose sans ces surprises.
+  var $inputModal = document.getElementById('inputModal');
+  var inputModalResolve = null;
+  function askInput(title, defaultValue, inputMode){
+    return new Promise(function(resolve){
+      document.getElementById('inputModalTitle').textContent = title;
+      var field = document.getElementById('inputModalField');
+      field.value = defaultValue || '';
+      field.setAttribute('inputmode', inputMode || 'text');
+      inputModalResolve = resolve;
+      $inputModal.classList.add('show');
+      setTimeout(function(){ field.focus(); field.select(); }, 200);
+    });
+  }
+  function resolveInputModal(value){
+    $inputModal.classList.remove('show');
+    var r = inputModalResolve; inputModalResolve = null;
+    if(r) r(value);
+  }
+  document.getElementById('inputModalOk').addEventListener('click', function(){
+    resolveInputModal(document.getElementById('inputModalField').value);
+  });
+  document.getElementById('inputModalCancel').addEventListener('click', function(){ resolveInputModal(null); });
+  document.getElementById('inputModalField').addEventListener('keydown', function(e){
+    if(e.key === 'Enter') resolveInputModal(this.value);
   });
 
   /* ================= Vider ================= */
