@@ -6,69 +6,69 @@
 <title>Scanette</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
   /* ---------- Tokens ---------- */
   :root{
-    --bg:#12151a;
-    --surface:#1b1f26;
-    --surface-2:#242a33;
-    --surface-3:#2e3540;
-    --line:#333c48;
-    --text:#eef1f5;
-    --text-dim:#8d97a5;
-    --text-faint:#5c6672;
-    --accent:#ffb020;
-    --accent-ink:#1a1300;
-    --accent-dim:#4a380f;
-    --danger:#ff6b5e;
-    --danger-dim:#4a1f1a;
-    --success:#4fd67a;
-    --font-display:'Space Grotesk', system-ui, sans-serif;
+    --bg:#13161b;
+    --surface:#1a1e25;
+    --surface-2:#232830;
+    --surface-3:#2c323b;
+    --line:#343b45;
+    --text:#eef0f3;
+    --text-dim:#8b94a1;
+    --text-faint:#59616c;
+    --accent:#d68a3f;
+    --accent-ink:#1a1000;
+    --accent-dim:#3d2c15;
+    --danger:#dd5b4d;
+    --danger-dim:#3a1e1a;
+    --success:#3fae6b;
+    --font-display:'Manrope', system-ui, sans-serif;
     --font-mono:'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
     --radius:10px;
     --radius-sm:6px;
   }
   @media (prefers-color-scheme: light){
     :root:not([data-theme="dark"]){
-      --bg:#f3f1ec;
+      --bg:#f4f2ee;
       --surface:#ffffff;
-      --surface-2:#eceae3;
-      --surface-3:#e2ded4;
-      --line:#d8d3c6;
+      --surface-2:#ece9e2;
+      --surface-3:#e1ddd2;
+      --line:#d6d0c2;
       --text:#1c1a15;
-      --text-dim:#6b6558;
+      --text-dim:#686254;
       --text-faint:#a19a89;
-      --accent:#c67d0e;
+      --accent:#a8621f;
       --accent-ink:#fffaf0;
-      --accent-dim:#f2ddb4;
-      --danger:#c23b2e;
-      --danger-dim:#f4d9d5;
-      --success:#1f8a4c;
+      --accent-dim:#f0dcb8;
+      --danger:#b8402f;
+      --danger-dim:#f3d8d2;
+      --success:#227a4c;
     }
   }
   :root[data-theme="light"]{
-    --bg:#f3f1ec;
+    --bg:#f4f2ee;
     --surface:#ffffff;
-    --surface-2:#eceae3;
-    --surface-3:#e2ded4;
-    --line:#d8d3c6;
+    --surface-2:#ece9e2;
+    --surface-3:#e1ddd2;
+    --line:#d6d0c2;
     --text:#1c1a15;
-    --text-dim:#6b6558;
+    --text-dim:#686254;
     --text-faint:#a19a89;
-    --accent:#c67d0e;
+    --accent:#a8621f;
     --accent-ink:#fffaf0;
-    --accent-dim:#f2ddb4;
-    --danger:#c23b2e;
-    --danger-dim:#f4d9d5;
-    --success:#1f8a4c;
+    --accent-dim:#f0dcb8;
+    --danger:#b8402f;
+    --danger-dim:#f3d8d2;
+    --success:#227a4c;
   }
   :root[data-theme="dark"]{
-    --bg:#12151a; --surface:#1b1f26; --surface-2:#242a33; --surface-3:#2e3540;
-    --line:#333c48; --text:#eef1f5; --text-dim:#8d97a5; --text-faint:#5c6672;
-    --accent:#ffb020; --accent-ink:#1a1300; --accent-dim:#4a380f;
-    --danger:#ff6b5e; --danger-dim:#4a1f1a; --success:#4fd67a;
+    --bg:#13161b; --surface:#1a1e25; --surface-2:#232830; --surface-3:#2c323b;
+    --line:#343b45; --text:#eef0f3; --text-dim:#8b94a1; --text-faint:#59616c;
+    --accent:#d68a3f; --accent-ink:#1a1000; --accent-dim:#3d2c15;
+    --danger:#dd5b4d; --danger-dim:#3a1e1a; --success:#3fae6b;
   }
 
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
@@ -119,6 +119,9 @@
   .brand-row{ display:flex; align-items:center; justify-content:space-between; }
   .brand{ display:flex; align-items:center; gap:9px; font-size:19px; font-weight:700; line-height:1; }
   .brand .mark{ font-size:22px; line-height:1; }
+  .icon{ width:1.15em; height:1.15em; display:inline-block; vertical-align:-0.18em; flex-shrink:0;
+    fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+  .icon-fill{ fill:currentColor; stroke:none; }
   .head-actions{ display:flex; align-items:center; gap:6px; }
   .icon-btn{
     width:34px; height:34px; border-radius:50%; border:1px solid var(--line);
@@ -178,6 +181,9 @@
 
   /* ---------- Filtre + tri ---------- */
   .filter-row{ display:flex; gap:8px; align-items:center; margin-bottom:12px; }
+  .search-field{ position:relative; flex:1; min-width:0; }
+  .search-field-icon{ position:absolute; left:13px; top:50%; transform:translateY(-50%); color:var(--text-faint); pointer-events:none; }
+  .search-field .field{ margin-bottom:0; padding-left:38px; }
   .filter-row .field{ margin-bottom:0; flex:1; }
   .sort-toggle{
     flex-shrink:0; width:44px; height:44px; border-radius:var(--radius-sm); border:1px solid var(--line);
@@ -342,8 +348,32 @@
 </head>
 <body>
 
+<svg style="position:absolute; width:0; height:0; overflow:hidden;" aria-hidden="true">
+  <defs>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4l13 8-13 8V4Z"/></symbol>
+    <symbol id="i-box" viewBox="0 0 24 24"><path d="M12 3 3 7.5 12 12l9-4.5L12 3Z"/><path d="M3 7.5v9L12 21l9-4.5v-9"/><path d="M12 12v9"/></symbol>
+    <symbol id="i-theme" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5Z"/></symbol>
+    <symbol id="i-backspace" viewBox="0 0 24 24"><path d="M9 5h11v14H9l-6-7 6-7Z"/><path d="M13 10l4 4M17 10l-4 4"/></symbol>
+    <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M7 18a4 4 0 1 1 .7-7.94A5 5 0 0 1 17.5 11 3.5 3.5 0 0 1 17 18H7Z"/></symbol>
+    <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H12v18H6.5A2.5 2.5 0 0 1 4 18.5v-13Z"/><path d="M20 5.5A2.5 2.5 0 0 0 17.5 3H12v18h5.5a2.5 2.5 0 0 0 2.5-2.5v-13Z"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l4 2"/></symbol>
+    <symbol id="i-power" viewBox="0 0 24 24"><path d="M12 3v8"/><path d="M6.5 6.5a8 8 0 1 0 11 0"/></symbol>
+    <symbol id="i-camera" viewBox="0 0 24 24"><path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Z"/><circle cx="12" cy="13" r="3.3"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-4.7-4.7"/></symbol>
+    <symbol id="i-torch" viewBox="0 0 24 24"><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.5.4.8 1 .8 1.6v.5h5.4v-.5c0-.6.3-1.2.8-1.6A6 6 0 0 0 12 3Z"/></symbol>
+    <symbol id="i-keyboard" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M6 10h1M10 10h1M14 10h1M18 10h1M6 14h10"/></symbol>
+    <symbol id="i-printer" viewBox="0 0 24 24"><path d="M6 9V4h12v5"/><rect x="4" y="9" width="16" height="8" rx="1.5"/><path d="M8 13h8v6H8v-6Z"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M7 3h7l4 4v14H7V3Z"/><path d="M14 3v4h4"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V4M8 8l4-4 4 4"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M4 12a8 8 0 0 1 14-5.3M20 12a8 8 0 0 1-14 5.3"/><path d="M18 4v4h-4M6 20v-4h4"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6 7l1 13h10l1-13"/></symbol>
+    <symbol id="i-inbox" viewBox="0 0 24 24"><path d="M4 12h4l2 3h4l2-3h4"/><path d="M6 5h12l2 7v7H4v-7l2-7Z"/></symbol>
+  </defs>
+</svg>
+
 <div id="lock">
-  <div class="mark">📦</div>
+  <div class="mark"><svg class="icon" style="width:1em;height:1em;"><use href="#i-box"/></svg></div>
   <h1 id="lockTitle">Accès réservé</h1>
   <p id="lockSub">Entre ton code à 4 chiffres pour ouvrir la feuille d'inventaire.</p>
   <div class="pin-dots" id="pinDots">
@@ -354,20 +384,20 @@
     <button data-k="1">1</button><button data-k="2">2</button><button data-k="3">3</button>
     <button data-k="4">4</button><button data-k="5">5</button><button data-k="6">6</button>
     <button data-k="7">7</button><button data-k="8">8</button><button data-k="9">9</button>
-    <button class="wide" data-k="theme">🌓</button><button data-k="0">0</button><button class="wide" data-k="back">⌫</button>
+    <button class="wide" data-k="theme"><svg class="icon"><use href="#i-theme"/></svg></button><button data-k="0">0</button><button class="wide" data-k="back"><svg class="icon"><use href="#i-backspace"/></svg></button>
   </div>
 </div>
 
 <div class="app" id="app" style="display:none;">
   <header>
     <div class="brand-row">
-      <div class="brand"><span class="mark">📦</span> Scanette</div>
+      <div class="brand"><span class="mark"><svg class="icon"><use href="#i-box"/></svg></span> Scanette</div>
       <div class="head-actions">
-        <div class="sync-dot off" id="syncDot" title="Catalogue partagé : hors ligne">☁️</div>
-        <button class="icon-btn" id="catalogBtn" title="Catalogue">📚</button>
-        <button class="icon-btn" id="historyBtn" title="Historique">🕓</button>
-        <button class="icon-btn" id="themeBtn" title="Thème">🌓</button>
-        <button class="icon-btn" id="lockBtn" title="Verrouiller">⏻</button>
+        <div class="sync-dot off" id="syncDot" title="Catalogue partagé : hors ligne"><svg class="icon"><use href="#i-cloud"/></svg></div>
+        <button class="icon-btn" id="catalogBtn" title="Catalogue"><svg class="icon"><use href="#i-book"/></svg></button>
+        <button class="icon-btn" id="historyBtn" title="Historique"><svg class="icon"><use href="#i-clock"/></svg></button>
+        <button class="icon-btn" id="themeBtn" title="Thème"><svg class="icon"><use href="#i-theme"/></svg></button>
+        <button class="icon-btn" id="lockBtn" title="Verrouiller"><svg class="icon"><use href="#i-power"/></svg></button>
       </div>
     </div>
     <div class="stat-row">
@@ -380,7 +410,7 @@
   <main>
     <div class="panel">
       <div class="scan-row">
-        <button class="btn-scan" id="btnScan">▶ &nbsp;DÉMARRER LE SCAN</button>
+        <button class="btn-scan" id="btnScan"><svg class="icon icon-fill"><use href="#i-play"/></svg>&nbsp;DÉMARRER LE SCAN</button>
         <div class="stepper">
           <button id="stepDown">−</button>
           <div class="val" id="stepVal">×1</div>
@@ -388,23 +418,26 @@
         </div>
       </div>
       <div class="row-btn2">
-        <button class="btn-ghost" id="btnPhotoRef">📷 Référence texte seule (sans code-barres)</button>
+        <button class="btn-ghost" id="btnPhotoRef"><svg class="icon"><use href="#i-camera"/></svg> Référence texte seule (sans code-barres)</button>
       </div>
       <div class="supplier-bar">
         <div class="supplier-current" id="supplierCurrent">— aucun fournisseur —</div>
-        <button class="btn-add-supplier" id="btnAddSupplier">➕ Fournisseur</button>
+        <button class="btn-add-supplier" id="btnAddSupplier"><svg class="icon"><use href="#i-plus"/></svg> Fournisseur</button>
       </div>
     </div>
 
     <div class="selection-bar" id="selectionBar">
       <div class="n" id="selCount">0 sélectionnée</div>
-      <button id="btnMove">📦 Déplacer vers…</button>
+      <button id="btnMove"><svg class="icon"><use href="#i-box"/></svg> Déplacer vers…</button>
       <button class="danger" id="btnDeleteSel">Suppr.</button>
       <button id="btnCancelSel">Annuler</button>
     </div>
 
     <div class="filter-row">
-      <input class="field" id="listFilter" placeholder="🔍 Filtrer les références...">
+      <div class="search-field">
+        <svg class="icon search-field-icon"><use href="#i-search"/></svg>
+        <input class="field" id="listFilter" placeholder="Filtrer les références...">
+      </div>
       <button class="sort-toggle" id="btnSortToggle" title="Ordre de tri"></button>
     </div>
 
@@ -416,16 +449,16 @@
         <div class="q">?</div>
       </div>
       <div class="help-body" id="helpBody" style="display:none;">
-        <p><b>➕ Fournisseur</b> : pose un titre (ex. DELPHI). Tout ce que tu scannes ensuite se range dessous, jusqu'au fournisseur suivant.</p>
-        <p><b>▶ Scan</b> : codes-barres / QR. Nouveau produit → l'app propose une référence. Produit connu → +1 (ou +N) direct.</p>
-        <p><b>📷</b> : référence écrite sans code-barres, saisie manuelle en série.</p>
+        <p><b>Fournisseur</b> : pose un titre (ex. DELPHI). Tout ce que tu scannes ensuite se range dessous, jusqu'au fournisseur suivant.</p>
+        <p><b>Scan</b> : codes-barres / QR. Nouveau produit → l'app propose une référence. Produit connu → +1 (ou +N) direct.</p>
+        <p><b>Référence texte seule</b> : référence écrite sans code-barres, saisie manuelle en série.</p>
         <p>Touche le chiffre de quantité d'une ligne pour la saisir directement.</p>
         <p><b>+ prix</b> : touche le tag sous une référence pour lui donner un prix unitaire — la valeur totale du stock s'affiche alors en haut, et dans les exports.</p>
         <p><b>✎ / ✕</b> : renommer ou supprimer une référence directement depuis la ligne.</p>
-        <p><b>↩ Annuler</b> apparaît après chaque scan ou changement de quantité, pour revenir en arrière en un geste.</p>
-        <p><b>☁️</b> : le catalogue code-barres → référence est partagé avec toute l'équipe en temps réel. Dès que quelqu'un identifie un code, tout le monde le voit. Les quantités et fournisseurs restent, eux, propres à cet appareil.</p>
-        <p><b>📚 Catalogue</b> : voir, renommer, supprimer ou ajouter à la main toutes les correspondances code-barres → référence connues sur cet appareil.</p>
-        <p><b>🕓 Historique</b> : chaque "Vider" garde une sauvegarde datée, consultable, exportable en CSV, ou restaurable sur la feuille en cours.</p>
+        <p><b>Annuler</b> apparaît après chaque scan ou changement de quantité, pour revenir en arrière en un geste.</p>
+        <p><b>Synchro</b> : le catalogue code-barres → référence est partagé avec toute l'équipe en temps réel. Dès que quelqu'un identifie un code, tout le monde le voit. Les quantités et fournisseurs restent, eux, propres à cet appareil.</p>
+        <p><b>Catalogue</b> : voir, renommer, supprimer ou ajouter à la main toutes les correspondances code-barres → référence connues sur cet appareil.</p>
+        <p><b>Historique</b> : chaque "Vider" garde une sauvegarde datée, consultable, exportable en CSV, ou restaurable sur la feuille en cours.</p>
       </div>
     </div>
   </main>
@@ -441,11 +474,11 @@
   <div class="toolbar">
     <div class="toolbar-inner">
       <div class="tb-grid tb-grid-5">
-        <button id="btnPDF"><span class="ic">🖨</span>PDF</button>
-        <button id="btnCSV"><span class="ic">📄</span>CSV</button>
-        <button id="btnStar6000"><span class="ic">📤</span>Star6000</button>
-        <button id="btnSync"><span class="ic">🔄</span>Sync</button>
-        <button id="btnClear"><span class="ic">🗑</span>Vider</button>
+        <button id="btnPDF"><svg class="icon ic"><use href="#i-printer"/></svg>PDF</button>
+        <button id="btnCSV"><svg class="icon ic"><use href="#i-file"/></svg>CSV</button>
+        <button id="btnStar6000"><svg class="icon ic"><use href="#i-upload"/></svg>Star6000</button>
+        <button id="btnSync"><svg class="icon ic"><use href="#i-refresh"/></svg>Sync</button>
+        <button id="btnClear"><svg class="icon ic"><use href="#i-trash"/></svg>Vider</button>
       </div>
     </div>
   </div>
@@ -456,7 +489,7 @@
   <div class="scan-top">
     <button class="close" id="btnCloseScan">✕</button>
     <div class="right-group">
-      <button class="torch" id="btnTorch" title="Flash">💡</button>
+      <button class="torch" id="btnTorch" title="Flash"><svg class="icon"><use href="#i-torch"/></svg></button>
       <div class="mode-label" id="scanModeLabel">×1</div>
     </div>
   </div>
@@ -476,7 +509,7 @@
       <button id="quickQtyCustom">✎ Autre</button>
     </div>
     <p id="scanHint">Cadre le code-barres dans la zone</p>
-    <button class="scan-manual" id="btnManualCode">⌨️ Code illisible — saisir les chiffres</button>
+    <button class="scan-manual" id="btnManualCode"><svg class="icon"><use href="#i-keyboard"/></svg> Code illisible — saisir les chiffres</button>
   </div>
 </div>
 
@@ -488,7 +521,7 @@
     <p class="sub">Touche une référence détectée ci-dessous, ou tape-la.</p>
     <div class="candidate-list" id="candidateList"></div>
     <input class="field" id="refInput" placeholder="Nom de la référence">
-    <button class="btn-secondary" id="btnSearchOnline">🔍 Chercher ce code en ligne</button>
+    <button class="btn-secondary" id="btnSearchOnline"><svg class="icon"><use href="#i-search"/></svg> Chercher ce code en ligne</button>
     <button class="btn-primary" style="margin-top:10px;" id="btnConfirmRef">OK</button>
     <button class="btn-secondary" id="btnSkipRef">Plus tard</button>
   </div>
@@ -522,7 +555,7 @@
     <p class="sub">Tape la référence lue sur l'étiquette, valide, puis enchaîne la suivante.</p>
     <div class="supplier-current active" id="photoRefSupplier" style="margin-bottom:12px;"></div>
     <input class="field" id="photoRefInput" placeholder="Référence">
-    <button class="btn-primary" id="btnAddPhotoRef">➕ Ajouter et continuer</button>
+    <button class="btn-primary" id="btnAddPhotoRef"><svg class="icon"><use href="#i-plus"/></svg> Ajouter et continuer</button>
     <button class="btn-secondary" id="btnDonePhotoRef">Terminer</button>
   </div>
 </div>
@@ -532,9 +565,12 @@
   <div class="sheet" style="max-height:90vh;">
     <h2>Catalogue</h2>
     <p class="sub">Toutes les correspondances code-barres → référence connues sur cet appareil.</p>
-    <input class="field" id="catalogFilter" placeholder="🔍 Filtrer par code ou référence...">
+    <div class="search-field">
+      <svg class="icon search-field-icon"><use href="#i-search"/></svg>
+      <input class="field" id="catalogFilter" placeholder="Filtrer par code ou référence...">
+    </div>
     <div id="catalogList"></div>
-    <button class="btn-secondary" id="btnAddCatalogEntry">➕ Ajouter une correspondance</button>
+    <button class="btn-secondary" id="btnAddCatalogEntry"><svg class="icon"><use href="#i-plus"/></svg> Ajouter une correspondance</button>
     <button class="btn-secondary" id="btnCloseCatalog">Fermer</button>
   </div>
 </div>
@@ -882,7 +918,7 @@
     var el = document.getElementById('supplierCurrent');
     if(state.activeSupplierId){
       var s = getSupplier(state.activeSupplierId);
-      if(s){ el.textContent = '📦 ' + s.name; el.classList.add('active'); return; }
+      if(s){ el.textContent = s.name; el.classList.add('active'); return; }
     }
     el.textContent = '— aucun fournisseur —';
     el.classList.remove('active');
@@ -905,8 +941,8 @@
 
     if(groups.length === 0){
       wrap.innerHTML = q
-        ? '<div class="panel empty-state"><div class="big">🔍</div><p>Aucune référence ne correspond à "'+escapeHtml(listFilterText)+'".</p></div>'
-        : '<div class="panel empty-state"><div class="big">📭</div><p>Aucune référence scannée pour l\'instant.<br>Lance le scan ou ajoute une référence texte.</p></div>';
+        ? '<div class="panel empty-state"><svg class="icon big"><use href="#i-search"/></svg><p>Aucune référence ne correspond à "'+escapeHtml(listFilterText)+'".</p></div>'
+        : '<div class="panel empty-state"><svg class="icon big"><use href="#i-inbox"/></svg><p>Aucune référence scannée pour l\'instant.<br>Lance le scan ou ajoute une référence texte.</p></div>';
       updateSelectionBar();
       return;
     }
@@ -1395,7 +1431,7 @@
   var $photoRefModal = document.getElementById('photoRefModal');
   document.getElementById('btnPhotoRef').addEventListener('click', function(){
     var s = state.activeSupplierId ? getSupplier(state.activeSupplierId) : null;
-    document.getElementById('photoRefSupplier').textContent = s ? ('📦 ' + s.name) : '— aucun fournisseur —';
+    document.getElementById('photoRefSupplier').textContent = s ? s.name : '— aucun fournisseur —';
     document.getElementById('photoRefInput').value = '';
     $photoRefModal.classList.add('show');
     setTimeout(function(){ document.getElementById('photoRefInput').focus(); }, 200);
@@ -1498,7 +1534,7 @@
       btn.title = 'Trié par ordre alphanumérique — toucher pour revenir à l\'ordre de scan';
       btn.classList.add('active');
     } else {
-      btn.textContent = '🕐';
+      btn.innerHTML = '<svg class="icon"><use href="#i-clock"/></svg>';
       btn.title = 'Trié par ordre de scan — toucher pour trier par ordre alphanumérique';
       btn.classList.remove('active');
     }
@@ -1527,7 +1563,7 @@
     var list = document.getElementById('moveList');
     if(state.suppliers.length === 0){ toast('Crée d\'abord un fournisseur'); return; }
     list.innerHTML = state.suppliers.map(function(s){
-      return '<button data-dest="'+s.id+'">📦 ' + escapeHtml(s.name) + '</button>';
+      return '<button data-dest="'+s.id+'"><svg class="icon"><use href="#i-box"/></svg> ' + escapeHtml(s.name) + '</button>';
     }).join('');
     $moveModal.classList.add('show');
   });
@@ -1604,7 +1640,7 @@
 
   /* ================= Vider ================= */
   document.getElementById('btnClear').addEventListener('click', function(){
-    openConfirm('Vider la feuille ?', 'Une sauvegarde est gardée dans l\'historique (🕓). Le catalogue de correspondances est conservé aussi.', function(){
+    openConfirm('Vider la feuille ?', 'Une sauvegarde est gardée dans l\'historique. Le catalogue de correspondances est conservé aussi.', function(){
       snapshotToHistory();
       state.suppliers = [];
       state.activeSupplierId = null;
@@ -1934,7 +1970,7 @@
       html += '<div class="history-row" data-id="'+entry.id+'">';
       html += '<div class="history-row-head" data-role="toggleHistory"><div><span class="date">'+formatHistoryDate(entry.date)+'</span><span class="meta">'+t.refs+' réf. · '+t.qty+' pièces</span></div><span>▾</span></div>';
       html += '<div class="history-row-actions">';
-      html += '<button class="row-icon-btn" data-role="exportHistoryCsv" title="Exporter en CSV">📄 CSV</button>';
+      html += '<button class="row-icon-btn" data-role="exportHistoryCsv" title="Exporter en CSV"><svg class="icon"><use href="#i-file"/></svg> CSV</button>';
       html += '<button class="row-icon-btn" data-role="restoreHistory" title="Restaurer sur la feuille">↩ Restaurer</button>';
       html += '<button class="row-icon-btn" data-role="deleteHistory" title="Supprimer">✕</button>';
       html += '</div>';
