@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ---------- Tokens ---------- */
   :root{
@@ -724,7 +725,14 @@
     return s;
   }
 
-  /* ================= Shared catalog (db capability) ================= */
+  /* ================= Shared catalog (Supabase) ================= */
+  // "db" = claude.use('db') n'existe que dans le bac à sable d'un artefact
+  // Claude — sur un vrai hébergement (Netlify), ça échouait silencieusement
+  // et le catalogue partagé entre collègues n'a en réalité jamais fonctionné
+  // en production. Remplacé par un vrai projet Supabase (table "catalog",
+  // realtime activé), qui fonctionne à l'identique dans les deux contextes.
+  var SUPABASE_URL = 'https://crlajjxiztvlkveitjpy.supabase.co';
+  var SUPABASE_KEY = 'sb_publishable_xxdT_igdGriNkQeM28vhzQ_6q3AI7SU';
   var db = null;
   var catalogMigrated = false;
 
@@ -736,50 +744,62 @@
     el.title = on ? 'Catalogue partagé : synchronisé' : 'Catalogue partagé : hors ligne (mode local)';
   }
 
-  function catalogDocRef(code){ return db.collection('catalog').doc(String(code)); }
-
   function migrateLocalCatalogToDb(existingCodes){
     Object.keys(catalog).forEach(function(code){
-      if(!existingCodes[code]){
-        catalogDocRef(code).set({ ref: catalog[code], updatedAt: new Date().toISOString() }).catch(function(){});
-      }
+      if(!existingCodes[code]) writeCatalogEntry(code, catalog[code]);
     });
   }
 
   async function initSharedCatalog(){
+    if(typeof supabase === 'undefined' || !supabase.createClient){ setSyncIndicator(false); return; }
     try{
-      db = await claude.use('db');
-    }catch(e){ db = null; }
-    if(!db){ setSyncIndicator(false); return; }
-
-    db.collection('catalog').onSnapshot(function(snap){
-      var changed = false;
+      db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+      var res = await db.from('catalog').select('code, ref');
+      if(res.error) throw res.error;
       var existingCodes = {};
-      snap.docs.forEach(function(d){
-        existingCodes[d.id] = true;
-        var data = d.data();
-        if(data && data.ref && catalog[d.id] !== data.ref){
-          catalog[d.id] = data.ref;
+      var changed = false;
+      (res.data || []).forEach(function(row){
+        existingCodes[row.code] = true;
+        if(row.ref && catalog[row.code] !== row.ref){
+          catalog[row.code] = row.ref;
           changed = true;
         }
       });
-      if(changed){ saveCatalog(); }
-      setSyncIndicator(true);
+      if(changed) saveCatalog();
       if(!catalogMigrated){
         catalogMigrated = true;
         migrateLocalCatalogToDb(existingCodes);
       }
-    }, function(err){
-      console.error(err);
+    }catch(e){
+      console.error(e);
+      db = null;
       setSyncIndicator(false);
-    });
+      return;
+    }
+
+    db.channel('catalog-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'catalog' }, function(payload){
+        var row = payload.eventType === 'DELETE' ? payload.old : payload.new;
+        if(!row || !row.code || !row.ref) return;
+        if(catalog[row.code] !== row.ref){
+          catalog[row.code] = row.ref;
+          saveCatalog();
+        }
+      })
+      .subscribe(function(status){
+        setSyncIndicator(status === 'SUBSCRIBED');
+      });
   }
 
   function writeCatalogEntry(code, refName){
     if(!db || !code) return;
-    try{
-      catalogDocRef(code).set({ ref: refName, updatedAt: new Date().toISOString() }).catch(function(e){ console.error(e); });
-    }catch(e){ console.error(e); }
+    db.from('catalog').upsert({ code: String(code), ref: refName, updated_at: new Date().toISOString() })
+      .then(function(res){ if(res.error) console.error(res.error); });
+  }
+  function deleteCatalogEntry(code){
+    if(!db || !code) return;
+    db.from('catalog').delete().eq('code', String(code))
+      .then(function(res){ if(res.error) console.error(res.error); });
   }
 
   /* ================= Lock / PIN ================= */
@@ -2009,6 +2029,7 @@
       openConfirm('Supprimer cette correspondance ?', 'Le code ' + code + ' ne sera plus reconnu automatiquement au scan. Les articles déjà comptés dans la feuille ne sont pas touchés.', function(){
         delete catalog[code];
         saveCatalog();
+        deleteCatalogEntry(code);
         renderCatalogList();
         toast('Supprimé');
       });
