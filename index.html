@@ -7,7 +7,6 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/@zxing/library@latest"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
   /* ---------- Tokens ---------- */
@@ -847,20 +846,49 @@
   }
 
   // Safari / Firefox : pas de BarcodeDetector natif, on retombe sur ZXing (maintenu, gère QR + 1D).
+  // Chargé à la demande : plusieurs sources en secours, au cas où l'une des
+  // CDN ne serve pas le bundle navigateur attendu (pas de dépendance à une
+  // seule URL qui pourrait un jour ne plus exposer window.ZXing).
+  var ZXING_SOURCES = [
+    'https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js',
+    'https://cdn.jsdelivr.net/npm/@zxing/library/umd/index.min.js',
+    'https://cdn.jsdelivr.net/npm/@zxing/library@latest'
+  ];
+  var zxingLoadPromise = null;
+  function ensureZXing(){
+    if(typeof ZXing !== 'undefined') return Promise.resolve(true);
+    if(zxingLoadPromise) return zxingLoadPromise;
+    zxingLoadPromise = ZXING_SOURCES.reduce(function(chain, src){
+      return chain.then(function(ok){
+        if(ok) return true;
+        return new Promise(function(resolve){
+          var s = document.createElement('script');
+          s.src = src;
+          s.onload = function(){ resolve(typeof ZXing !== 'undefined'); };
+          s.onerror = function(){ resolve(false); };
+          document.head.appendChild(s);
+        });
+      });
+    }, Promise.resolve(false));
+    return zxingLoadPromise;
+  }
+
   function startZXingScan(video){
-    if(typeof ZXing === 'undefined'){ toast('Scanner indisponible — connexion requise'); return; }
-    try{
-      if(!codeReader) codeReader = new ZXing.BrowserMultiFormatReader();
-      scanState.mode = 'zxing';
-      codeReader.decodeFromConstraints(
-        { video: SCAN_CONSTRAINTS },
-        video,
-        function(result){ if(result) onDetectedCode(result.getText()); }
-      ).then(function(){
-        var track = video.srcObject && video.srcObject.getVideoTracks()[0];
-        if(track) setupTorchButton(track);
-      }).catch(function(err){ toast('Impossible d\'accéder à la caméra'); console.error(err); });
-    }catch(e){ toast('Scanner indisponible'); console.error(e); }
+    ensureZXing().then(function(ok){
+      if(!ok){ toast('Scanner indisponible — connexion requise'); return; }
+      try{
+        if(!codeReader) codeReader = new ZXing.BrowserMultiFormatReader();
+        scanState.mode = 'zxing';
+        codeReader.decodeFromConstraints(
+          { video: SCAN_CONSTRAINTS },
+          video,
+          function(result){ if(result) onDetectedCode(result.getText()); }
+        ).then(function(){
+          var track = video.srcObject && video.srcObject.getVideoTracks()[0];
+          if(track) setupTorchButton(track);
+        }).catch(function(err){ toast('Impossible d\'accéder à la caméra'); console.error(err); });
+      }catch(e){ toast('Scanner indisponible'); console.error(e); }
+    });
   }
 
   // Flash/torche : très utile sur étiquettes brillantes, sombres ou mal éclairées.
