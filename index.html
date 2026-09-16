@@ -1079,6 +1079,9 @@
     if(!item) return;
     var prevQty = item.qty;
     item.qty = Math.max(0, item.qty + n);
+    // Cohérent avec le bouton "−" de la liste : à 0, l'article est retiré au
+    // lieu de laisser une ligne fantôme à quantité 0 dans la feuille.
+    if(item.qty === 0){ supplier.items = supplier.items.filter(function(it){ return it.id !== item.id; }); }
     saveState(); renderAll();
     document.getElementById('quickQtyLabel').textContent = '✓ ' + item.ref + '  ·  qté ' + item.qty;
     clearTimeout(quickQtyTimer);
@@ -1090,7 +1093,10 @@
   var lastAction = null; // {supplierId, itemId, wasNew, prevQty, delta}
   var lastActionTimer = null;
   function recordLastAction(supplier, item, wasNew, prevQty){
-    lastAction = { supplierId: supplier.id, itemId: item.id, wasNew: wasNew, prevQty: prevQty, delta: item.qty - prevQty };
+    // On garde une copie de l'article : si la quantité vient de tomber à 0,
+    // il a déjà été retiré de supplier.items au moment de l'appel, et "Annuler"
+    // devra le réinsérer plutôt que de chercher un id qui n'existe plus.
+    lastAction = { supplierId: supplier.id, itemId: item.id, wasNew: wasNew, prevQty: prevQty, delta: item.qty - prevQty, itemSnapshot: JSON.parse(JSON.stringify(item)) };
     document.getElementById('laaRef').textContent = item.ref;
     document.getElementById('laaDelta').textContent = (lastAction.delta >= 0 ? '+' : '') + lastAction.delta + '  →  ×' + item.qty;
     var bar = document.getElementById('lastActionBar');
@@ -1106,7 +1112,16 @@
         supplier.items = supplier.items.filter(function(it){ return it.id !== lastAction.itemId; });
       } else {
         var item = supplier.items.find(function(it){ return it.id === lastAction.itemId; });
-        if(item) item.qty = lastAction.prevQty;
+        if(item){
+          item.qty = lastAction.prevQty;
+        } else if(lastAction.itemSnapshot){
+          // La quantité était tombée à 0 : l'article avait été retiré de la
+          // liste. On le réinsère avec sa quantité d'avant, sinon "Annuler"
+          // affichait un succès sans rien restaurer.
+          var restored = JSON.parse(JSON.stringify(lastAction.itemSnapshot));
+          restored.qty = lastAction.prevQty;
+          supplier.items.push(restored);
+        }
       }
       saveState(); renderAll();
     }
@@ -1441,7 +1456,7 @@
         count > 0 ? count + ' article(s) de ce fournisseur seront définitivement perdus.' : 'Cette action est définitive.',
         function(){
           state.suppliers = state.suppliers.filter(function(s){ return s.id !== delId; });
-          if(state.activeSupplierId === delId) state.activeSupplierId = '__none__';
+          if(state.activeSupplierId === delId) state.activeSupplierId = null;
           saveState(); renderAll(); renderExistingSupplierList();
           toast('Fournisseur supprimé');
         }
