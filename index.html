@@ -1496,7 +1496,11 @@
   // sinon le champ de saisie reste caché derrière.
   if(window.visualViewport){
     window.visualViewport.addEventListener('resize', function(){
-      var kb = Math.max(0, window.innerHeight - window.visualViewport.height - window.visualViewport.offsetTop);
+      var kb = window.innerHeight - window.visualViewport.height - window.visualViewport.offsetTop;
+      // Plafond de sécurité : un vrai clavier iOS ne dépasse jamais ~45% de la
+      // hauteur d'écran. Si le calcul dérape (évènement transitoire pendant
+      // l'animation du clavier), on ne pousse jamais la fenêtre hors champ.
+      kb = Math.max(0, Math.min(kb, window.innerHeight * 0.45));
       document.documentElement.style.setProperty('--kb-offset', kb + 'px');
     });
   }
