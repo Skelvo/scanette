@@ -93,6 +93,8 @@
     gap:22px; padding:24px; text-align:center;
   }
   #lock .mark{ font-size:44px; }
+  #pinStep{ display:flex; flex-direction:column; align-items:center; gap:22px; }
+  #nameStep .btn-primary{ margin-top:10px; }
   #lock h1{ font-size:22px; margin:0; letter-spacing:.2px; }
   #lock p{ color:var(--text-dim); font-size:14px; margin:0; max-width:280px; line-height:1.5; }
   .pin-dots{ display:flex; gap:14px; margin:6px 0; }
@@ -387,6 +389,11 @@
   <div class="mark"><svg class="icon" style="width:1em;height:1em;"><use href="#i-box"/></svg></div>
   <h1 id="lockTitle">Accès réservé</h1>
   <p id="lockSub">Entre ton code à 4 chiffres pour ouvrir la feuille d'inventaire.</p>
+  <div id="nameStep" style="display:none; width:100%; max-width:260px;">
+    <input class="field" id="nameStepInput" placeholder="Ton prénom" style="text-align:center;">
+    <button class="btn-primary" id="nameStepContinue">Continuer</button>
+  </div>
+  <div id="pinStep">
   <div class="pin-dots" id="pinDots">
     <span></span><span></span><span></span><span></span>
   </div>
@@ -396,6 +403,7 @@
     <button data-k="4">4</button><button data-k="5">5</button><button data-k="6">6</button>
     <button data-k="7">7</button><button data-k="8">8</button><button data-k="9">9</button>
     <button class="wide" data-k="theme"><svg class="icon"><use href="#i-theme"/></svg></button><button data-k="0">0</button><button class="wide" data-k="back"><svg class="icon"><use href="#i-backspace"/></svg></button>
+  </div>
   </div>
 </div>
 
@@ -472,7 +480,7 @@
         <p><b>Catalogue</b> : voir, renommer, supprimer ou ajouter à la main toutes les correspondances code-barres → référence connues sur cet appareil.</p>
         <p><b>Historique</b> : chaque "Vider" garde une sauvegarde datée, consultable, exportable en CSV, ou restaurable sur la feuille en cours.</p>
         <p><b>Prénom</b> : sert à savoir qui a compté quoi (affiché sur les lignes et dans les exports), et à voir qui d'autre a l'app ouverte en même temps. <button id="btnChangeUserName" style="display:inline; background:none; border:none; padding:0; margin:0; font-size:12.5px; font-family:inherit; color:var(--accent); font-weight:700;">Ton prénom : <span id="userNameDisplay">(non défini)</span> — toucher pour changer</button></p>
-        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v19 — 16/09 23:20</b></p>
+        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v20 — 16/09 23:45</b></p>
       </div>
     </div>
   </main>
@@ -879,10 +887,40 @@
   }
   function setLockHint(msg){ document.getElementById('lockHint').textContent = msg || ' '; }
 
-  if(settingPin){
-    document.getElementById('lockTitle').textContent = 'Bienvenue';
-    document.getElementById('lockSub').textContent = "Choisis un code à 4 chiffres pour protéger ta feuille d'inventaire.";
+  // Étape "prénom" : une vraie étape de l'écran de verrouillage (pas une
+  // modale par-dessus) — une modale a le même z-index que #lock et se
+  // faisait donc recouvrir par lui, invisible et impossible à valider.
+  // Affichée avant le clavier PIN, tant qu'aucun prénom n'est connu sur cet
+  // appareil (première configuration, ou code déjà existant avant l'ajout
+  // de cette fonctionnalité).
+  function showLockStep(){
+    var needsName = !currentUser;
+    document.getElementById('nameStep').style.display = needsName ? 'block' : 'none';
+    document.getElementById('pinStep').style.display = needsName ? 'none' : 'block';
+    if(needsName){
+      document.getElementById('lockTitle').textContent = 'Bienvenue';
+      document.getElementById('lockSub').textContent = "D'abord, ton prénom : ça sert à savoir qui a compté quoi.";
+      var input = document.getElementById('nameStepInput');
+      input.value = '';
+      setTimeout(function(){ input.focus(); }, 200);
+    } else if(settingPin){
+      document.getElementById('lockTitle').textContent = 'Bienvenue';
+      document.getElementById('lockSub').textContent = "Choisis un code à 4 chiffres pour protéger ta feuille d'inventaire.";
+    } else {
+      document.getElementById('lockTitle').textContent = 'Accès réservé';
+      document.getElementById('lockSub').textContent = "Entre ton code à 4 chiffres pour ouvrir la feuille d'inventaire.";
+    }
   }
+  function confirmNameStep(){
+    var val = normalizeRef(document.getElementById('nameStepInput').value);
+    if(!val){ toast('Entre ton prénom'); return; }
+    setCurrentUser(val);
+    showLockStep();
+  }
+  document.getElementById('nameStepContinue').addEventListener('click', confirmNameStep);
+  document.getElementById('nameStepInput').addEventListener('keydown', function(e){
+    if(e.key === 'Enter') confirmNameStep();
+  });
 
   // pointerdown plutôt que click : plus fiable pour une saisie rapide et
   // répétée (4 chiffres tapés vite à la suite), sans le délai/la synthèse
@@ -899,14 +937,6 @@
     if(pinBuffer.length === 4){ setTimeout(handlePinComplete, 150); }
   });
 
-  // Demande le prénom avant d'entrer dans l'app si on ne le connaît pas
-  // encore — que ce soit à la toute première configuration du code, ou à un
-  // déverrouillage normal (cas d'un code déjà configuré avant l'ajout de
-  // cette fonctionnalité, comme sur cet appareil).
-  function unlockAskingNameIfNeeded(){
-    if(!currentUser) setTimeout(function(){ askUserName(unlock); }, 300);
-    else unlock();
-  }
   function handlePinComplete(){
     if(settingPin){
       if(!firstPinEntry){
@@ -918,7 +948,7 @@
       }
       if(firstPinEntry === pinBuffer){
         try{ localStorage.setItem(PIN_KEY, pinBuffer); }catch(e){}
-        unlockAskingNameIfNeeded();
+        unlock();
       } else {
         firstPinEntry = '';
         pinBuffer = '';
@@ -928,7 +958,7 @@
       }
     } else {
       if(pinBuffer === pinStored){
-        unlockAskingNameIfNeeded();
+        unlock();
       } else {
         pinBuffer = '';
         renderPinDots();
@@ -2271,6 +2301,7 @@
   renderPinDots();
   renderSortToggle();
   renderUserName();
+  showLockStep();
   initSharedCatalog();
 })();
 </script>
