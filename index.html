@@ -233,13 +233,13 @@
   .modal-backdrop{
     position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:180; display:none;
     align-items:flex-end; justify-content:center;
-    padding-bottom:var(--kb-offset,0px); transition:padding-bottom .15s;
   }
   .modal-backdrop.show{ display:flex; }
-  .modal-backdrop.center{ align-items:center; padding:20px; padding-bottom:20px; }
+  .modal-backdrop.center{ align-items:center; padding:20px; }
   .sheet{
     width:100%; max-width:560px; background:var(--surface); border-radius:16px 16px 0 0;
     padding:18px 18px calc(18px + env(safe-area-inset-bottom)); max-height:86vh; overflow-y:auto;
+    transform:translateY(calc(-1 * var(--kb-offset,0px))); transition:transform .15s;
   }
   .modal-backdrop.center .sheet{ border-radius:16px; max-height:80vh; }
   .sheet h2{ font-size:16px; margin:0 0 4px; }
@@ -265,9 +265,9 @@
     box-shadow:0 0 0 2000px rgba(0,0,0,.45); pointer-events:none;
   }
   .scan-top{ position:absolute; top:0; left:0; right:0; padding:16px; display:flex; justify-content:space-between; align-items:center; z-index:2; }
-  .scan-top .close{ width:38px; height:38px; border-radius:50%; background:rgba(0,0,0,.5); border:none; color:#fff; font-size:16px; }
+  .scan-top .close{ width:38px; height:38px; border-radius:50%; background:rgba(0,0,0,.5); border:none; color:#fff; font-size:16px; display:flex; align-items:center; justify-content:center; padding:0; line-height:1; }
   .scan-top .right-group{ display:flex; align-items:center; gap:8px; }
-  .scan-top .torch{ width:38px; height:38px; border-radius:50%; background:rgba(0,0,0,.5); border:none; color:#fff; font-size:15px; display:none; }
+  .scan-top .torch{ width:38px; height:38px; border-radius:50%; background:rgba(0,0,0,.5); border:none; color:#fff; font-size:15px; display:none; align-items:center; justify-content:center; padding:0; line-height:1; }
   .scan-top .torch.active{ background:var(--accent); color:var(--accent-ink); }
   .scan-top .mode-label{ background:rgba(0,0,0,.5); color:#fff; padding:8px 14px; border-radius:20px; font-size:12.5px; font-family:var(--font-mono); }
   .zoom-ctrl{ position:absolute; right:10px; top:50%; transform:translateY(-50%); z-index:2; display:flex; flex-direction:column; align-items:center; gap:6px; background:rgba(0,0,0,.5); border-radius:20px; padding:10px 6px; }
@@ -872,7 +872,34 @@
     f.classList.remove('hit'); void f.offsetWidth; f.classList.add('hit');
   }
 
+  // Bip synthétisé (pas de fichier audio à charger) — créé/débloqué ici, au tap
+  // sur "Démarrer le scan", qui est un vrai geste utilisateur : indispensable
+  // sur iOS pour que le son soit ensuite autorisé à jouer tout seul pendant
+  // la boucle de détection.
+  var audioCtx = null;
+  function unlockAudio(){
+    try{
+      if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if(audioCtx.state === 'suspended') audioCtx.resume();
+    }catch(e){}
+  }
+  function beep(){
+    if(!audioCtx) return;
+    try{
+      var osc = audioCtx.createOscillator();
+      var gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = 1000;
+      gain.gain.setValueAtTime(0.25, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.1);
+      osc.connect(gain); gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.1);
+    }catch(e){}
+  }
+
   function startScan(){
+    unlockAudio();
     $overlay.classList.add('show');
     var video = document.getElementById('scanVideo');
     if('BarcodeDetector' in window){
@@ -996,6 +1023,7 @@
     if(code === lastDetected.code && (now - lastDetected.t) < 1400) return;
     lastDetected = { code: code, t: now };
     if(navigator.vibrate) navigator.vibrate(60);
+    beep();
     handleScannedCode(code);
   }
 
@@ -1028,6 +1056,7 @@
     if(code === null) return;
     code = code.trim();
     if(!code){ toast('Entre un code'); return; }
+    beep();
     handleScannedCode(code);
   });
 
@@ -1062,6 +1091,7 @@
     $refModal.classList.remove('show');
     scanningPaused = false;
     lastDetected = { code: null, t: 0 };
+    beep();
     showQuickQty(res.supplier.id, res.item.id);
   });
   document.getElementById('btnSkipRef').addEventListener('click', function(){
