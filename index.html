@@ -176,6 +176,15 @@
     padding:10px 13px; font-size:12.5px; font-weight:600; white-space:nowrap;
   }
 
+  /* ---------- Filtre + tri ---------- */
+  .filter-row{ display:flex; gap:8px; align-items:center; margin-bottom:12px; }
+  .filter-row .field{ margin-bottom:0; flex:1; }
+  .sort-toggle{
+    flex-shrink:0; width:44px; height:44px; border-radius:var(--radius-sm); border:1px solid var(--line);
+    background:var(--surface-2); color:var(--text-dim); font-size:17px; display:flex; align-items:center; justify-content:center;
+  }
+  .sort-toggle.active{ border-color:var(--accent); color:var(--accent); }
+
   /* ---------- Groups / table ---------- */
   .group{ margin-bottom:14px; }
   .group-head{
@@ -373,7 +382,10 @@
       <button id="btnCancelSel">Annuler</button>
     </div>
 
-    <input class="field" id="listFilter" style="margin-bottom:12px;" placeholder="🔍 Filtrer les références...">
+    <div class="filter-row">
+      <input class="field" id="listFilter" placeholder="🔍 Filtrer les références...">
+      <button class="sort-toggle" id="btnSortToggle" title="Ordre de tri"></button>
+    </div>
 
     <div id="groupsWrap"></div>
 
@@ -540,11 +552,32 @@
   var CATALOG_KEY = 'scanette_catalog_v1';
   var PIN_KEY = 'scanette_pin_v1';
   var THEME_KEY = 'scanette_theme_v1';
+  var SORT_KEY = 'scanette_sort_v1';
 
   var state = loadState();
   var catalog = loadCatalog(); // { code: refName } — local cache; source of truth is the shared db when connected
   var selected = new Set();
   var listFilterText = '';
+  var sortMode = 'scan';
+  try{ sortMode = localStorage.getItem(SORT_KEY) || 'scan'; }catch(e){}
+
+  // Tri "naturel" : compare les segments numériques comme des nombres, pas
+  // comme du texte, pour que "NTH2" passe bien avant "NTH10".
+  function naturalCompare(a, b){
+    var re = /(\d+)|(\D+)/g;
+    var ax = [], bx = [], m;
+    while((m = re.exec(a))) ax.push(m[1] ? [parseInt(m[1], 10), ''] : [Infinity, m[2] || m[0]]);
+    re.lastIndex = 0;
+    while((m = re.exec(b))) bx.push(m[1] ? [parseInt(m[1], 10), ''] : [Infinity, m[2] || m[0]]);
+    var len = Math.min(ax.length, bx.length);
+    for(var i = 0; i < len; i++){
+      var d = ax[i][0] - bx[i][0];
+      if(d) return d;
+      var s = ax[i][1].localeCompare(bx[i][1]);
+      if(s) return s;
+    }
+    return ax.length - bx.length;
+  }
   var scanStep = 1;
   var pendingCode = null; // barcode awaiting reference choice
   var lastDetected = { code: null, t: 0 };
@@ -796,7 +829,8 @@
     var groups = state.suppliers.map(function(s){
       var items = q ? s.items.filter(function(it){
         return it.ref.toLowerCase().indexOf(q) !== -1 || (it.code && it.code.indexOf(q) !== -1);
-      }) : s.items;
+      }) : s.items.slice();
+      if(sortMode === 'alpha'){ items = items.slice().sort(function(a,b){ return naturalCompare(a.ref, b.ref); }); }
       return { supplier: s, items: items };
     }).filter(function(g){ return g.items.length > 0; });
 
@@ -1388,6 +1422,26 @@
     renderGroups();
   });
 
+  function renderSortToggle(){
+    var btn = document.getElementById('btnSortToggle');
+    if(sortMode === 'alpha'){
+      btn.textContent = 'A↓Z';
+      btn.title = 'Trié par ordre alphanumérique — toucher pour revenir à l\'ordre de scan';
+      btn.classList.add('active');
+    } else {
+      btn.textContent = '🕐';
+      btn.title = 'Trié par ordre de scan — toucher pour trier par ordre alphanumérique';
+      btn.classList.remove('active');
+    }
+  }
+  document.getElementById('btnSortToggle').addEventListener('click', function(){
+    sortMode = sortMode === 'alpha' ? 'scan' : 'alpha';
+    try{ localStorage.setItem(SORT_KEY, sortMode); }catch(e){}
+    renderSortToggle();
+    renderGroups();
+    toast(sortMode === 'alpha' ? 'Tri : A → Z' : 'Tri : ordre de scan');
+  });
+
   /* ================= Selection bar ================= */
   document.getElementById('btnCancelSel').addEventListener('click', function(){ selected.clear(); renderGroups(); updateSelectionBar(); });
   document.getElementById('btnDeleteSel').addEventListener('click', function(){
@@ -1666,6 +1720,7 @@
 
   /* ================= Init ================= */
   renderPinDots();
+  renderSortToggle();
   initSharedCatalog();
 })();
 </script>
