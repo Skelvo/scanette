@@ -527,13 +527,14 @@
   </div>
 </div>
 
-<!-- Nouveau fournisseur modal -->
+<!-- Fournisseur modal -->
 <div class="modal-backdrop" id="supplierModal">
   <div class="sheet">
-    <h2>Nouveau fournisseur</h2>
-    <p class="sub">Ex. DELPHI, BOSCH, VALEO…</p>
-    <input class="field" id="supplierInput" placeholder="Nom du fournisseur">
-    <button class="btn-primary" id="btnConfirmSupplier">Créer</button>
+    <h2>Fournisseur actif</h2>
+    <p class="sub" id="supplierModalSub">Choisis un fournisseur existant, ou crée-en un nouveau.</p>
+    <div class="move-list" id="existingSupplierList"></div>
+    <input class="field" id="supplierInput" placeholder="Nom du nouveau fournisseur (ex. DELPHI)">
+    <button class="btn-primary" id="btnConfirmSupplier"><svg class="icon"><use href="#i-plus"/></svg> Créer et activer</button>
     <button class="btn-secondary" id="btnCancelSupplier">Annuler</button>
   </div>
 </div>
@@ -1399,31 +1400,63 @@
   });
 
   /* ================= Fournisseur modal ================= */
+  // Choisir un fournisseur DÉJÀ créé plutôt que d'en retaper le nom : sinon
+  // taper "DELPHI" une deuxième fois crée un second groupe DELPHI séparé au
+  // lieu de rejoindre le premier, et fausse silencieusement le comptage.
   var $supplierModal = document.getElementById('supplierModal');
-  document.getElementById('btnAddSupplier').addEventListener('click', function(){
+  function renderExistingSupplierList(){
+    var real = state.suppliers.filter(function(s){ return s.id !== '__none__'; });
+    var list = document.getElementById('existingSupplierList');
+    if(real.length === 0){ list.innerHTML = ''; return; }
+    list.innerHTML = real.map(function(s){
+      return '<button data-activate="'+s.id+'"><svg class="icon"><use href="#i-box"/></svg> ' + escapeHtml(s.name) + '</button>';
+    }).join('');
+  }
+  function openSupplierModal(){
+    renderExistingSupplierList();
     document.getElementById('supplierInput').value = '';
     $supplierModal.classList.add('show');
-    setTimeout(function(){ document.getElementById('supplierInput').focus(); }, 200);
+  }
+  document.getElementById('btnAddSupplier').addEventListener('click', openSupplierModal);
+  document.getElementById('existingSupplierList').addEventListener('click', function(e){
+    var b = e.target.closest('button'); if(!b) return;
+    var id = b.getAttribute('data-activate');
+    var s = getSupplier(id);
+    if(!s) return;
+    state.activeSupplierId = s.id;
+    saveState(); renderAll();
+    $supplierModal.classList.remove('show');
+    toast('Fournisseur "' + s.name + '" actif');
   });
   document.getElementById('btnCancelSupplier').addEventListener('click', function(){ $supplierModal.classList.remove('show'); });
   document.getElementById('btnConfirmSupplier').addEventListener('click', function(){
     var name = normalizeRef(document.getElementById('supplierInput').value);
-    if(!name){ toast('Entre un nom'); return; }
-    var s = { id: uid(), name: name, items: [] };
-    state.suppliers.push(s);
+    if(!name){ toast('Entre un nom, ou choisis-en un existant ci-dessus'); return; }
+    // Défense supplémentaire : si ce nom existe déjà (même approximativement,
+    // casse différente), on rejoint ce fournisseur au lieu d'en créer un double.
+    var existing = state.suppliers.find(function(s){ return s.id !== '__none__' && s.name.toLowerCase() === name.toLowerCase(); });
+    var s;
+    if(existing){
+      s = existing;
+      toast('Fournisseur "' + s.name + '" déjà existant — activé');
+    } else {
+      s = { id: uid(), name: name, items: [] };
+      state.suppliers.push(s);
+      toast('Fournisseur "' + name + '" actif');
+    }
     state.activeSupplierId = s.id;
     saveState();
     renderAll();
     $supplierModal.classList.remove('show');
-    toast('Fournisseur "' + name + '" actif');
   });
   document.getElementById('supplierCurrent').addEventListener('click', function(){
-    // tap active supplier chip to clear it
     if(state.activeSupplierId){
       state.activeSupplierId = null;
       saveState();
       renderSupplierBar();
       toast('Fournisseur désactivé');
+    } else {
+      openSupplierModal();
     }
   });
 
