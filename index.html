@@ -1256,7 +1256,7 @@
   function onDetectedCode(code){
     if(!code) return;
     var now = Date.now();
-    if(code === lastDetected.code && (now - lastDetected.t) < 1400) return;
+    if(code === lastDetected.code && (now - lastDetected.t) < 1500) return;
     lastDetected = { code: code, t: now };
     if(navigator.vibrate) navigator.vibrate(60);
     beep();
