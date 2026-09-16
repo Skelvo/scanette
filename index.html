@@ -1890,7 +1890,10 @@
     if(!window.visualViewport || window.visualViewport.scale <= 1.02 || zoomResetPending) return;
     zoomResetPending = true;
     var original = viewportMeta.getAttribute('content');
-    viewportMeta.setAttribute('content', original + ', maximum-scale=1.0');
+    // Le viewport a déjà maximum-scale=1.0 en permanence : ré-écrire exactement
+    // la même valeur ne change rien pour Safari, qui ne recalcule alors rien.
+    // Il faut une vraie bascule (user-scalable yes -> no) pour forcer le reset.
+    viewportMeta.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes');
     requestAnimationFrame(function(){
       viewportMeta.setAttribute('content', original);
       zoomResetPending = false;
@@ -1900,6 +1903,10 @@
     window.visualViewport.addEventListener('resize', resetZoomIfNeeded);
     window.visualViewport.addEventListener('scroll', resetZoomIfNeeded);
   }
+  // Filet supplémentaire : vérifie aussi à chaque tap (passif, ne bloque
+  // jamais le défilement) — couvre le cas où aucun resize/scroll du
+  // visualViewport ne se déclenche juste après la fermeture d'une fenêtre.
+  document.addEventListener('touchend', resetZoomIfNeeded, { passive: true });
 
   /* ================= Catalogue (voir/modifier toutes les correspondances) ================= */
   var catalogFilterText = '';
