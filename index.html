@@ -200,6 +200,14 @@
     background:var(--surface-2); color:var(--text-dim); font-size:17px; display:flex; align-items:center; justify-content:center;
   }
   .sort-toggle.active{ border-color:var(--accent); color:var(--accent); }
+  .last-scan-chip{
+    display:flex; align-items:center; gap:8px; width:100%; margin-bottom:10px;
+    background:var(--accent-dim); border:1px solid var(--accent); color:var(--text);
+    border-radius:var(--radius-sm); padding:9px 12px; font-size:12.5px; text-align:left;
+  }
+  .last-scan-chip .lbl{ color:var(--accent); font-weight:700; font-size:11px; flex-shrink:0; }
+  .last-scan-chip .ref{ flex:1; min-width:0; font-family:var(--font-mono); font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .last-scan-chip .qty{ flex-shrink:0; font-family:var(--font-mono); font-weight:700; color:var(--accent); }
 
   /* ---------- Groups / table ---------- */
   .group{ margin-bottom:14px; }
@@ -226,6 +234,7 @@
   .price-tag.set{ border-style:solid; border-color:var(--line); color:var(--text-dim); }
   .row-icon-btn{ background:none; border:none; color:var(--text-faint); font-size:15px; padding:6px; flex-shrink:0; }
   .row-icon-btn:active{ color:var(--text); }
+  .row-icon-btn.danger{ color:var(--danger); }
 
   .catalog-row{ display:flex; align-items:center; gap:8px; padding:10px 2px; border-bottom:1px solid var(--line); }
   .catalog-row .ref-wrap{ flex:1; min-width:0; }
@@ -460,6 +469,12 @@
       <button id="btnCancelSel">Annuler</button>
     </div>
 
+    <button class="last-scan-chip" id="lastScanChip" style="display:none;">
+      <span class="lbl">Dernier scan</span>
+      <span class="ref" id="lastScanChipRef"></span>
+      <span class="qty" id="lastScanChipQty"></span>
+    </button>
+
     <div class="filter-row">
       <div class="search-field">
         <svg class="icon search-field-icon"><use href="#i-search"/></svg>
@@ -487,7 +502,7 @@
         <p><b>Catalogue</b> : voir, renommer, supprimer ou ajouter à la main toutes les correspondances code-barres → référence connues sur cet appareil.</p>
         <p><b>Historique</b> : chaque "Vider" garde une sauvegarde datée, consultable, exportable en CSV, ou restaurable sur la feuille en cours.</p>
         <p><b>Prénom</b> : sert à savoir qui a compté quoi (affiché sur les lignes et dans les exports), et à voir qui d'autre a l'app ouverte en même temps. <button id="btnChangeUserName" style="display:inline; background:none; border:none; padding:0; margin:0; font-size:12.5px; font-family:inherit; color:var(--accent); font-weight:700;">Ton prénom : <span id="userNameDisplay">(non défini)</span> — toucher pour changer</button></p>
-        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v48 — 17/09 17:10</b></p>
+        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v49 — 17/09 17:40</b></p>
       </div>
     </div>
   </main>
@@ -1114,7 +1129,7 @@
         html += '<button data-role="qup">+</button>';
         html += '</div>';
         html += '<button class="row-icon-btn" data-role="editRef" title="Renommer">✎</button>';
-        html += '<button class="row-icon-btn" data-role="deleteRef" title="Supprimer">✕</button>';
+        html += '<button class="row-icon-btn danger" data-role="deleteRef" title="Supprimer">✕</button>';
         html += '</div>';
       });
       html += '</div>';
@@ -1317,7 +1332,27 @@
     bar.classList.add('show');
     clearTimeout(lastActionTimer);
     lastActionTimer = setTimeout(function(){ bar.classList.remove('show'); }, 6000);
+    updateLastScanChip(item.ref, item.qty);
   }
+  // Contrairement à la barre "Annuler" ci-dessus (qui se cache après 6s,
+  // et reste en plus cachée derrière la caméra pendant un scan), ce repère
+  // reste affiché en permanence juste au-dessus de la liste, pour retrouver
+  // d'un coup d'œil la dernière ref pointée. Toucher le repère la retrouve
+  // directement dans la liste, sans avoir à la retaper à la main.
+  var lastScanChipRef = null;
+  function updateLastScanChip(ref, qty){
+    lastScanChipRef = ref;
+    document.getElementById('lastScanChipRef').innerHTML = refBreakHtml(ref);
+    document.getElementById('lastScanChipQty').textContent = '×' + qty;
+    document.getElementById('lastScanChip').style.display = 'flex';
+  }
+  document.getElementById('lastScanChip').addEventListener('click', function(){
+    if(!lastScanChipRef) return;
+    var input = document.getElementById('listFilter');
+    input.value = lastScanChipRef;
+    listFilterText = lastScanChipRef;
+    renderGroups();
+  });
   function undoLastAction(){
     if(!lastAction) return;
     var supplier = getSupplier(lastAction.supplierId);
