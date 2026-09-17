@@ -320,6 +320,7 @@
   .btn-secondary{ width:100%; background:var(--surface-2); border:1px solid var(--line); color:var(--text); border-radius:var(--radius-sm); padding:12px; font-size:13.5px; font-weight:600; margin-top:8px; }
   .candidate-list{ display:flex; flex-direction:column; gap:6px; margin-bottom:12px; max-height:160px; overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain; }
   .candidate{ text-align:left; background:var(--surface-2); border:1px solid var(--line); color:var(--text); border-radius:var(--radius-sm); padding:10px 12px; font-family:var(--font-mono); font-size:13px; font-weight:600; }
+  .candidate.ocr-top{ border-color:var(--accent); background:var(--accent-dim); color:var(--accent); font-size:15px; }
   .candidate:active{ background:var(--surface-3); }
   .move-list{ display:flex; flex-direction:column; gap:6px; margin-bottom:6px; max-height:220px; overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain; }
   .move-list button{ text-align:left; background:var(--surface-2); border:1px solid var(--line); color:var(--text); border-radius:var(--radius-sm); padding:11px 12px; font-size:13.5px; font-weight:600; display:flex; align-items:center; gap:8px; }
@@ -490,7 +491,7 @@
         <p><b>Catalogue</b> : voir, renommer, supprimer ou ajouter à la main toutes les correspondances code-barres → référence connues sur cet appareil.</p>
         <p><b>Historique</b> : chaque "Vider" garde une sauvegarde datée, consultable, exportable en CSV, ou restaurable sur la feuille en cours.</p>
         <p><b>Prénom</b> : sert à savoir qui a compté quoi (affiché sur les lignes et dans les exports), et à voir qui d'autre a l'app ouverte en même temps. <button id="btnChangeUserName" style="display:inline; background:none; border:none; padding:0; margin:0; font-size:12.5px; font-family:inherit; color:var(--accent); font-weight:700;">Ton prénom : <span id="userNameDisplay">(non défini)</span> — toucher pour changer</button></p>
-        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v28 — 17/09 08:30</b></p>
+        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v29 — 17/09 08:45</b></p>
       </div>
     </div>
   </main>
@@ -1582,10 +1583,20 @@
       return worker.recognize(canvas);
     }).then(function(result){
       if(pendingCode !== forCode) return; // la modale a changé de code entre-temps
-      var words = (result.data.words || []).filter(function(w){ return w.text && w.text.trim().length >= 2; });
-      // Le texte le plus "important" sur une étiquette de pièce est presque
-      // toujours le plus grand/gras (comme "4638" sur l'exemple) — on trie
-      // par hauteur de bloc détecté plutôt que par ordre de lecture.
+      // Une référence pièce, c'est des chiffres (ou chiffres + lettres) —
+      // jamais un mot entièrement en lettres comme une marque ou un modèle
+      // ("FORD", "GALAXY"...). On élimine donc tout bloc qui ne contient
+      // aucun chiffre, et parmi ce qui reste, le plus gros/gras l'emporte
+      // presque toujours (comme "1425" en gros sur l'étiquette) : tri par
+      // hauteur de bloc détecté.
+      var words = (result.data.words || []).filter(function(w){
+        var t = w.text && w.text.trim();
+        if(!t || t.length < 2) return false;
+        if(!/\d/.test(t)) return false;
+        if(!/^[A-Z0-9][A-Z0-9\-.]*$/i.test(t)) return false;
+        if(w.confidence != null && w.confidence < 35) return false;
+        return true;
+      });
       words.sort(function(a, b){
         var ah = a.bbox ? (a.bbox.y1 - a.bbox.y0) : 0;
         var bh = b.bbox ? (b.bbox.y1 - b.bbox.y0) : 0;
@@ -1603,11 +1614,15 @@
       var list = document.getElementById('ocrCandidateList');
       if(candidates.length === 0){
         list.style.display = 'none';
-        status.textContent = 'Aucun texte lisible détecté — tape la référence à la main.';
+        status.textContent = 'Aucun numéro lisible détecté — tape la référence à la main.';
       } else {
-        list.innerHTML = candidates.map(function(c){ return '<button class="candidate" data-ocr-ref="'+escapeHtml(c)+'">'+escapeHtml(c)+'</button>'; }).join('');
+        list.innerHTML = candidates.map(function(c, i){ return '<button class="candidate'+(i===0?' ocr-top':'')+'" data-ocr-ref="'+escapeHtml(c)+'">'+escapeHtml(c)+'</button>'; }).join('');
         list.style.display = 'flex';
-        status.textContent = 'Touche la référence lue sur l\'étiquette, ou tape-la.';
+        // Le plus gros candidat pré-remplit direct le champ (à corriger si
+        // besoin) — pas la peine de toucher quoi que ce soit si c'est bon.
+        var refInput = document.getElementById('refInput');
+        if(!refInput.value) refInput.value = candidates[0];
+        status.textContent = 'Référence lue automatiquement — vérifie, ou touche-en une autre ci-dessous.';
       }
     }).catch(function(e){
       console.error(e);
