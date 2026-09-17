@@ -487,7 +487,7 @@
         <p><b>Catalogue</b> : voir, renommer, supprimer ou ajouter à la main toutes les correspondances code-barres → référence connues sur cet appareil.</p>
         <p><b>Historique</b> : chaque "Vider" garde une sauvegarde datée, consultable, exportable en CSV, ou restaurable sur la feuille en cours.</p>
         <p><b>Prénom</b> : sert à savoir qui a compté quoi (affiché sur les lignes et dans les exports), et à voir qui d'autre a l'app ouverte en même temps. <button id="btnChangeUserName" style="display:inline; background:none; border:none; padding:0; margin:0; font-size:12.5px; font-family:inherit; color:var(--accent); font-weight:700;">Ton prénom : <span id="userNameDisplay">(non défini)</span> — toucher pour changer</button></p>
-        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v41 — 17/09 15:10</b></p>
+        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v42 — 17/09 15:35</b></p>
       </div>
     </div>
   </main>
@@ -1227,18 +1227,18 @@
       // fournisseurs. On prévient avant, plutôt que de laisser passer.
       if(known && known.supplier.id !== activeId){
         flashScan(true);
-        scanningPaused = true;
+        pauseScanning();
         var activeName = getSupplier(activeId) ? getSupplier(activeId).name : 'Sans fournisseur';
         openConfirm(
           'Déjà compté ailleurs',
           '"' + known.item.ref + '" est déjà enregistré chez "' + known.supplier.name + '" (qté ' + known.item.qty + '). Ajouter quand même sous "' + activeName + '" ?',
           function(){
-            scanningPaused = false;
+            resumeScanning();
             lastDetected = { code: null, t: 0 };
             var res = addOrIncrement(refName, code);
             showQuickQty(res.supplier.id, res.item.id);
           },
-          function(){ scanningPaused = false; }
+          function(){ resumeScanning(); }
         );
         return;
       }
@@ -1330,9 +1330,9 @@
     var addN = btn.getAttribute('data-add');
     if(addN){ adjustQuickQty(parseInt(addN, 10)); return; }
     if(btn.id === 'quickQtyCustom'){
-      scanningPaused = true;
+      pauseScanning();
       askInput('Ajouter combien de pièces ?', '1', 'numeric').then(function(nv){
-        scanningPaused = false;
+        resumeScanning();
         if(nv === null) return;
         nv = parseInt(nv, 10);
         if(!isNaN(nv) && nv !== 0) adjustQuickQty(nv);
@@ -1350,6 +1350,16 @@
   // Vrai pendant que la modale "référence inconnue" est ouverte par-dessus la
   // caméra, pour ne pas la rouvrir en boucle sur le même code déjà en attente.
   var scanningPaused = false;
+  // Le flux vidéo continue de tourner (donc la caméra chauffe) pendant
+  // scanningPaused même si on ne l'analyse plus — or ces pauses (saisie
+  // d'une référence, d'une quantité, confirmation) couvrent l'aperçu
+  // caméra avec une modale : rien n'est visible, donc rien n'est perdu à
+  // vraiment arrêter la caméra pendant ce temps plutôt que de la laisser
+  // tourner dans le vide. C'est surtout payant sur les pauses longues
+  // (taper une référence) qui, cumulées sur toute une session, sont
+  // probablement la vraie source de la chauffe — pas la détection en
+  // elle-même, déjà ralentie et recadrée.
+  var scanCameraHalted = false;
   // 1280x720 plutôt que le Full HD d'avant : reste largement net pour un
   // code-barres (même petit ou abîmé), mais nettement moins de pixels à
   // traiter à chaque image — ça fait une vraie différence sur la chauffe,
@@ -1359,7 +1369,12 @@
   // au point fixe plutôt lointaine, et un code-barres tenu de près (comme
   // sur une étiquette) reste flou et indécodable. Une valeur "ideal" est
   // ignorée sans erreur là où elle n'est pas supportée.
-  var SCAN_CONSTRAINTS = { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 }, advanced: [{ focusMode: 'continuous' }] };
+  // frameRate à 15 : la caméra tourne par défaut à 30 im/s, largement plus
+  // que nécessaire pour lire un code immobile analysé au mieux toutes les
+  // 300-500ms — moitié moins d'images à capturer/encoder en continu par le
+  // capteur, donc moitié moins de travail matériel pendant tout le temps où
+  // la caméra reste ouverte (pas seulement pendant la détection).
+  var SCAN_CONSTRAINTS = { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 15, max: 20 }, advanced: [{ focusMode: 'continuous' }] };
 
   // On n'analyse que la zone du cadre de visée affiché à l'écran, pas
   // l'image entière : moins de pixels à traiter à chaque tentative de
@@ -1472,9 +1487,14 @@
         });
       }
     }catch(e){ startZXingScan(video); return; }
+    scanState.mode = 'native';
+    acquireNativeCamera(video);
+  }
+  // Séparé de startNativeScan pour pouvoir ré-acquérir juste la caméra
+  // (sans recréer barcodeDetector) quand on sort d'une pause.
+  function acquireNativeCamera(video){
     navigator.mediaDevices.getUserMedia({ video: SCAN_CONSTRAINTS })
       .then(function(stream){
-        scanState.mode = 'native';
         scanState.stream = stream;
         video.srcObject = stream;
         setupCameraControls(stream.getVideoTracks()[0]);
@@ -1541,7 +1561,12 @@
     });
   }
   function startZXingScanCropped(video){
-    scanState.mode = 'zxing';
+    scanState.mode = 'zxing-cropped';
+    acquireZXingCroppedCamera(video);
+  }
+  // Séparé de startZXingScanCropped pour pouvoir ré-acquérir juste la
+  // caméra (sans re-tester decodeFromCanvas) quand on sort d'une pause.
+  function acquireZXingCroppedCamera(video){
     navigator.mediaDevices.getUserMedia({ video: SCAN_CONSTRAINTS })
       .then(function(stream){
         scanState.stream = stream;
@@ -1564,7 +1589,7 @@
       .catch(function(err){ toast('Impossible d\'accéder à la caméra'); console.error(err); });
   }
   function startZXingScanFullFrame(video){
-    scanState.mode = 'zxing';
+    scanState.mode = 'zxing-full';
     codeReader.decodeFromConstraints(
       { video: SCAN_CONSTRAINTS },
       video,
@@ -1573,6 +1598,34 @@
       var track = video.srcObject && video.srcObject.getVideoTracks()[0];
       if(track) setupCameraControls(track);
     }).catch(function(err){ toast('Impossible d\'accéder à la caméra'); console.error(err); });
+  }
+
+  // Coupe vraiment la caméra (hardware) pendant une pause prolongée — les
+  // modales qui déclenchent ces pauses recouvrent entièrement l'aperçu
+  // caméra, donc rien n'est visible ni perdu pendant ce temps. On la
+  // rallume à la sortie de pause, dans le même mode qu'avant.
+  function pauseScanning(){
+    scanningPaused = true;
+    if(scanCameraHalted) return;
+    scanCameraHalted = true;
+    if(scanState.timer){ clearInterval(scanState.timer); scanState.timer = null; }
+    if(scanState.mode === 'zxing-full' && codeReader){ try{ codeReader.reset(); }catch(e){} }
+    if(scanState.stream){ scanState.stream.getTracks().forEach(function(t){ t.stop(); }); scanState.stream = null; }
+    var video = document.getElementById('scanVideo');
+    if(video) video.srcObject = null;
+  }
+  function resumeScanning(){
+    scanningPaused = false;
+    if(!scanCameraHalted) return;
+    scanCameraHalted = false;
+    // L'utilisateur a pu fermer entièrement le scanner pendant la pause
+    // (stopScan a déjà tout nettoyé) — rien à ré-acquérir dans ce cas.
+    if(!$overlay.classList.contains('show')) return;
+    var video = document.getElementById('scanVideo');
+    if(!video) return;
+    if(scanState.mode === 'native') acquireNativeCamera(video);
+    else if(scanState.mode === 'zxing-cropped') acquireZXingCroppedCamera(video);
+    else if(scanState.mode === 'zxing-full') startZXingScanFullFrame(video);
   }
 
   // Flash/torche : très utile sur étiquettes brillantes, sombres ou mal éclairées.
@@ -1645,6 +1698,7 @@
     clearTimeout(quickQtyTimer);
     quickQtyTarget = null;
     scanningPaused = false;
+    scanCameraHalted = false;
     scanState.mode = null;
     pendingConfirmCode = null;
     pendingConfirmCount = 0;
@@ -1656,9 +1710,9 @@
   // le papier — aucun algorithme ne la retrouve. On laisse taper les chiffres
   // imprimés sous les barres, qui restent lisibles même quand les barres ne le sont plus.
   document.getElementById('btnManualCode').addEventListener('click', function(){
-    scanningPaused = true;
+    pauseScanning();
     askInput('Chiffres imprimés sous le code-barres', '', 'numeric').then(function(code){
-      scanningPaused = false;
+      resumeScanning();
       if(code === null) return;
       code = code.trim();
       if(!code){ toast('Entre un code'); return; }
@@ -1685,7 +1739,7 @@
   var $refModal = document.getElementById('refModal');
   forceUppercaseOnInput(document.getElementById('refInput'));
   function openRefModal(code){
-    scanningPaused = true;
+    pauseScanning();
     pendingCode = code;
     document.getElementById('refModalCode').textContent = code;
     document.getElementById('refInput').value = '';
@@ -1698,14 +1752,14 @@
     if(!val){ toast('Entre un nom de référence'); return; }
     var res = addOrIncrement(val, pendingCode);
     $refModal.classList.remove('show');
-    scanningPaused = false;
+    resumeScanning();
     lastDetected = { code: null, t: 0 };
     beep();
     showQuickQty(res.supplier.id, res.item.id);
   });
   document.getElementById('btnSkipRef').addEventListener('click', function(){
     $refModal.classList.remove('show');
-    scanningPaused = false;
+    resumeScanning();
     lastDetected = { code: null, t: 0 };
   });
   document.getElementById('btnSearchOnline').addEventListener('click', function(){
