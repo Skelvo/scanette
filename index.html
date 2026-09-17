@@ -487,7 +487,7 @@
         <p><b>Catalogue</b> : voir, renommer, supprimer ou ajouter à la main toutes les correspondances code-barres → référence connues sur cet appareil.</p>
         <p><b>Historique</b> : chaque "Vider" garde une sauvegarde datée, consultable, exportable en CSV, ou restaurable sur la feuille en cours.</p>
         <p><b>Prénom</b> : sert à savoir qui a compté quoi (affiché sur les lignes et dans les exports), et à voir qui d'autre a l'app ouverte en même temps. <button id="btnChangeUserName" style="display:inline; background:none; border:none; padding:0; margin:0; font-size:12.5px; font-family:inherit; color:var(--accent); font-weight:700;">Ton prénom : <span id="userNameDisplay">(non défini)</span> — toucher pour changer</button></p>
-        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v34 — 17/09 09:50</b></p>
+        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v35 — 17/09 10:05</b></p>
       </div>
     </div>
   </main>
@@ -1334,8 +1334,14 @@
   var audioCtx = null;
   function unlockAudio(){
     try{
-      if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      if(audioCtx.state === 'suspended') audioCtx.resume();
+      // iOS casse silencieusement le circuit audio après un moment en
+      // arrière-plan : son état reste "running" mais plus aucun son ne
+      // sort. Un simple resume() ne suffit alors plus — il faut repartir
+      // d'un circuit tout neuf à chaque appui sur "Démarrer le scan"
+      // (un vrai geste utilisateur, donc autorisé), plutôt que de
+      // réutiliser celui d'avant qui peut être resté cassé.
+      if(audioCtx){ try{ audioCtx.close(); }catch(e){} }
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     }catch(e){}
   }
   function beep(){
