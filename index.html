@@ -490,7 +490,7 @@
         <p><b>Catalogue</b> : voir, renommer, supprimer ou ajouter à la main toutes les correspondances code-barres → référence connues sur cet appareil.</p>
         <p><b>Historique</b> : chaque "Vider" garde une sauvegarde datée, consultable, exportable en CSV, ou restaurable sur la feuille en cours.</p>
         <p><b>Prénom</b> : sert à savoir qui a compté quoi (affiché sur les lignes et dans les exports), et à voir qui d'autre a l'app ouverte en même temps. <button id="btnChangeUserName" style="display:inline; background:none; border:none; padding:0; margin:0; font-size:12.5px; font-family:inherit; color:var(--accent); font-weight:700;">Ton prénom : <span id="userNameDisplay">(non défini)</span> — toucher pour changer</button></p>
-        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v27 — 17/09 08:10</b></p>
+        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v28 — 17/09 08:30</b></p>
       </div>
     </div>
   </main>
@@ -550,10 +550,8 @@
   <div class="sheet">
     <h2>Nouveau produit</h2>
     <div class="scanned-code" id="refModalCode"></div>
-    <p class="sub">Touche une référence détectée ci-dessous, ou tape-la.</p>
-    <div class="candidate-list" id="candidateList"></div>
-    <button class="btn-secondary" id="btnReadPhoto"><svg class="icon"><use href="#i-camera"/></svg> Lire le texte sur la pièce</button>
-    <div class="candidate-list" id="ocrCandidateList" style="display:none; margin-top:8px;"></div>
+    <p class="sub" id="ocrStatus">Lecture de l'étiquette en cours…</p>
+    <div class="candidate-list" id="ocrCandidateList" style="display:none;"></div>
     <input class="field" id="refInput" placeholder="Nom de la référence">
     <button class="btn-secondary" id="btnSearchOnline"><svg class="icon"><use href="#i-search"/></svg> Chercher ce code en ligne</button>
     <button class="btn-primary" style="margin-top:10px;" id="btnConfirmRef">OK</button>
@@ -1530,51 +1528,27 @@
 
   /* ================= Référence inconnue modal ================= */
   var $refModal = document.getElementById('refModal');
-  // Suggestions filtrées par ce qui est tapé, toujours limitées à quelques
-  // résultats : ça reste utilisable même avec un très gros catalogue, on
-  // n'affiche jamais "toutes les refs", juste les meilleures correspondances.
-  function renderRefCandidates(filterText, excludeCode){
-    var q = normalizeRef(filterText).toLowerCase();
-    var seen = {};
-    var matches = Object.keys(catalog)
-      .filter(function(c){ return c !== excludeCode; })
-      .map(function(c){ return catalog[c]; })
-      .filter(function(v){
-        var k = v.toLowerCase();
-        if(seen[k]) return false;
-        seen[k] = true;
-        return q ? k.indexOf(q) !== -1 : true;
-      })
-      .slice(0, 8);
-    var list = document.getElementById('candidateList');
-    list.innerHTML = matches.map(function(c){ return '<button class="candidate" data-ref="'+escapeHtml(c)+'">'+escapeHtml(c)+'</button>'; }).join('');
-  }
   function openRefModal(code){
     scanningPaused = true;
     pendingCode = code;
     document.getElementById('refModalCode').textContent = code;
     document.getElementById('refInput').value = '';
-    renderRefCandidates('', code);
     var ocrList = document.getElementById('ocrCandidateList');
     ocrList.innerHTML = ''; ocrList.style.display = 'none';
     $refModal.classList.add('show');
     setTimeout(function(){ document.getElementById('refInput').focus(); }, 200);
+    runOcrForRefModal(code);
   }
-  document.getElementById('refInput').addEventListener('input', function(){
-    renderRefCandidates(this.value, pendingCode);
-  });
-  document.getElementById('candidateList').addEventListener('click', function(e){
-    var b = e.target.closest('.candidate'); if(!b) return;
-    document.getElementById('refInput').value = b.getAttribute('data-ref');
-    renderRefCandidates(b.getAttribute('data-ref'), pendingCode);
-  });
+
   /* ================= Lecture du texte sur la pièce (OCR) ================= */
-  // Contrairement au catalogue (qui ne peut proposer que des références déjà
-  // connues, donc jamais utile pour un produit neuf), on essaie ici de lire
+  // Un produit neuf (par définition, si on est dans cette modale) ne peut pas
+  // correspondre à une référence déjà connue au catalogue — proposer les
+  // refs existantes n'a donc aucun sens ici. On essaie à la place de lire
   // directement ce qui est imprimé/écrit sur la pièce ou son étiquette, à
-  // partir de l'image caméra encore active derrière cette modale. Ce n'est
-  // jamais garanti (gravure, reflets, police stylisée…) : on propose juste
-  // des candidats à toucher pour remplir le champ, à corriger à la main sinon.
+  // partir de l'image caméra encore active derrière cette modale, et ce
+  // automatiquement dès l'ouverture (pas besoin d'y penser ou de cliquer).
+  // Jamais garanti (gravure, reflets, police stylisée…) : juste des
+  // candidats à toucher pour remplir le champ, à corriger à la main sinon.
   var ocrWorker = null;
   function ensureOcrWorker(){
     if(ocrWorker) return Promise.resolve(ocrWorker);
@@ -1595,13 +1569,11 @@
       }).then(function(){ ocrWorker = w; return w; });
     });
   }
-  document.getElementById('btnReadPhoto').addEventListener('click', function(){
-    var btn = this;
+  function runOcrForRefModal(forCode){
+    var status = document.getElementById('ocrStatus');
     var video = document.getElementById('scanVideo');
-    if(!video || !video.videoWidth){ toast('Caméra indisponible'); return; }
-    var original = btn.innerHTML;
-    btn.disabled = true;
-    btn.textContent = 'Lecture en cours… (peut prendre du temps la première fois)';
+    if(!video || !video.videoWidth){ status.textContent = 'Caméra indisponible pour la lecture automatique.'; return; }
+    status.textContent = 'Lecture de l\'étiquette en cours… (un peu plus long la toute première fois)';
     var canvas = document.createElement('canvas');
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
@@ -1609,10 +1581,11 @@
     ensureOcrWorker().then(function(worker){
       return worker.recognize(canvas);
     }).then(function(result){
+      if(pendingCode !== forCode) return; // la modale a changé de code entre-temps
       var words = (result.data.words || []).filter(function(w){ return w.text && w.text.trim().length >= 2; });
       // Le texte le plus "important" sur une étiquette de pièce est presque
-      // toujours le plus grand/gras (comme sur l'exemple : "4638" en gros) —
-      // on trie par hauteur de bloc détecté plutôt que par ordre de lecture.
+      // toujours le plus grand/gras (comme "4638" sur l'exemple) — on trie
+      // par hauteur de bloc détecté plutôt que par ordre de lecture.
       words.sort(function(a, b){
         var ah = a.bbox ? (a.bbox.y1 - a.bbox.y0) : 0;
         var bh = b.bbox ? (b.bbox.y1 - b.bbox.y0) : 0;
@@ -1630,19 +1603,18 @@
       var list = document.getElementById('ocrCandidateList');
       if(candidates.length === 0){
         list.style.display = 'none';
-        toast('Aucun texte lisible détecté — tape-la à la main');
+        status.textContent = 'Aucun texte lisible détecté — tape la référence à la main.';
       } else {
         list.innerHTML = candidates.map(function(c){ return '<button class="candidate" data-ocr-ref="'+escapeHtml(c)+'">'+escapeHtml(c)+'</button>'; }).join('');
         list.style.display = 'flex';
+        status.textContent = 'Touche la référence lue sur l\'étiquette, ou tape-la.';
       }
     }).catch(function(e){
       console.error(e);
-      toast('Lecture indisponible — connexion requise');
-    }).then(function(){
-      btn.disabled = false;
-      btn.innerHTML = original;
+      if(pendingCode !== forCode) return;
+      status.textContent = 'Lecture automatique indisponible (connexion requise) — tape la référence à la main.';
     });
-  });
+  }
   document.getElementById('ocrCandidateList').addEventListener('click', function(e){
     var b = e.target.closest('[data-ocr-ref]'); if(!b) return;
     document.getElementById('refInput').value = b.getAttribute('data-ocr-ref');
