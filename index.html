@@ -305,6 +305,9 @@
   }
   .modal-backdrop.center .sheet{ border-radius:16px; max-height:80vh; }
   .sheet h2{ font-size:16px; margin:0 0 4px; }
+  .sheet-head{ display:flex; align-items:center; justify-content:space-between; }
+  .sheet-head h2{ margin:0; }
+  .sheet-head .row-icon-btn{ font-size:17px; }
   .sheet .sub{ font-size:12.5px; color:var(--text-dim); margin:0 0 16px; }
   .scanned-code{ font-family:var(--font-mono); font-size:26px; font-weight:800; letter-spacing:.3px; color:var(--accent); margin:2px 0 8px; word-break:break-all; }
   /* font-size >= 16px : sous ce seuil, iOS zoome automatiquement la page à
@@ -487,7 +490,7 @@
         <p><b>Catalogue</b> : voir, renommer, supprimer ou ajouter à la main toutes les correspondances code-barres → référence connues sur cet appareil.</p>
         <p><b>Historique</b> : chaque "Vider" garde une sauvegarde datée, consultable, exportable en CSV, ou restaurable sur la feuille en cours.</p>
         <p><b>Prénom</b> : sert à savoir qui a compté quoi (affiché sur les lignes et dans les exports), et à voir qui d'autre a l'app ouverte en même temps. <button id="btnChangeUserName" style="display:inline; background:none; border:none; padding:0; margin:0; font-size:12.5px; font-family:inherit; color:var(--accent); font-weight:700;">Ton prénom : <span id="userNameDisplay">(non défini)</span> — toucher pour changer</button></p>
-        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v26 — 17/09 00:15</b></p>
+        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v27 — 17/09 08:10</b></p>
       </div>
     </div>
   </main>
@@ -549,6 +552,8 @@
     <div class="scanned-code" id="refModalCode"></div>
     <p class="sub">Touche une référence détectée ci-dessous, ou tape-la.</p>
     <div class="candidate-list" id="candidateList"></div>
+    <button class="btn-secondary" id="btnReadPhoto"><svg class="icon"><use href="#i-camera"/></svg> Lire le texte sur la pièce</button>
+    <div class="candidate-list" id="ocrCandidateList" style="display:none; margin-top:8px;"></div>
     <input class="field" id="refInput" placeholder="Nom de la référence">
     <button class="btn-secondary" id="btnSearchOnline"><svg class="icon"><use href="#i-search"/></svg> Chercher ce code en ligne</button>
     <button class="btn-primary" style="margin-top:10px;" id="btnConfirmRef">OK</button>
@@ -593,8 +598,8 @@
 <!-- Catalogue modal -->
 <div class="modal-backdrop" id="catalogModal">
   <div class="sheet" style="max-height:90vh;">
-    <h2>Catalogue</h2>
-    <p class="sub">Toutes les correspondances code-barres → référence connues sur cet appareil.</p>
+    <div class="sheet-head"><h2>Catalogue</h2><button class="row-icon-btn" id="btnCloseCatalogX" title="Fermer">✕</button></div>
+    <p class="sub" id="catalogSub">Toutes les correspondances code-barres → référence connues sur cet appareil.</p>
     <div class="search-field">
       <svg class="icon search-field-icon"><use href="#i-search"/></svg>
       <input class="field" id="catalogFilter" placeholder="Filtrer par code ou référence...">
@@ -608,7 +613,7 @@
 <!-- Historique modal -->
 <div class="modal-backdrop" id="historyModal">
   <div class="sheet" style="max-height:90vh;">
-    <h2>Historique</h2>
+    <div class="sheet-head"><h2>Historique</h2><button class="row-icon-btn" id="btnCloseHistoryX" title="Fermer">✕</button></div>
     <p class="sub">Une sauvegarde se crée automatiquement chaque fois que tu vides la feuille.</p>
     <div id="historyList"></div>
     <button class="btn-secondary" id="btnCloseHistory">Fermer</button>
@@ -1550,6 +1555,8 @@
     document.getElementById('refModalCode').textContent = code;
     document.getElementById('refInput').value = '';
     renderRefCandidates('', code);
+    var ocrList = document.getElementById('ocrCandidateList');
+    ocrList.innerHTML = ''; ocrList.style.display = 'none';
     $refModal.classList.add('show');
     setTimeout(function(){ document.getElementById('refInput').focus(); }, 200);
   }
@@ -1561,6 +1568,86 @@
     document.getElementById('refInput').value = b.getAttribute('data-ref');
     renderRefCandidates(b.getAttribute('data-ref'), pendingCode);
   });
+  /* ================= Lecture du texte sur la pièce (OCR) ================= */
+  // Contrairement au catalogue (qui ne peut proposer que des références déjà
+  // connues, donc jamais utile pour un produit neuf), on essaie ici de lire
+  // directement ce qui est imprimé/écrit sur la pièce ou son étiquette, à
+  // partir de l'image caméra encore active derrière cette modale. Ce n'est
+  // jamais garanti (gravure, reflets, police stylisée…) : on propose juste
+  // des candidats à toucher pour remplir le champ, à corriger à la main sinon.
+  var ocrWorker = null;
+  function ensureOcrWorker(){
+    if(ocrWorker) return Promise.resolve(ocrWorker);
+    var load = (typeof Tesseract !== 'undefined')
+      ? Promise.resolve()
+      : new Promise(function(resolve, reject){
+          var s = document.createElement('script');
+          s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+          s.onload = function(){ resolve(); };
+          s.onerror = function(){ reject(new Error('load failed')); };
+          document.head.appendChild(s);
+        });
+    return load.then(function(){
+      return Tesseract.createWorker('eng');
+    }).then(function(w){
+      return w.setParameters({
+        tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-./ '
+      }).then(function(){ ocrWorker = w; return w; });
+    });
+  }
+  document.getElementById('btnReadPhoto').addEventListener('click', function(){
+    var btn = this;
+    var video = document.getElementById('scanVideo');
+    if(!video || !video.videoWidth){ toast('Caméra indisponible'); return; }
+    var original = btn.innerHTML;
+    btn.disabled = true;
+    btn.textContent = 'Lecture en cours… (peut prendre du temps la première fois)';
+    var canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+    ensureOcrWorker().then(function(worker){
+      return worker.recognize(canvas);
+    }).then(function(result){
+      var words = (result.data.words || []).filter(function(w){ return w.text && w.text.trim().length >= 2; });
+      // Le texte le plus "important" sur une étiquette de pièce est presque
+      // toujours le plus grand/gras (comme sur l'exemple : "4638" en gros) —
+      // on trie par hauteur de bloc détecté plutôt que par ordre de lecture.
+      words.sort(function(a, b){
+        var ah = a.bbox ? (a.bbox.y1 - a.bbox.y0) : 0;
+        var bh = b.bbox ? (b.bbox.y1 - b.bbox.y0) : 0;
+        return bh - ah;
+      });
+      var seen = {}, candidates = [];
+      words.forEach(function(w){
+        var t = w.text.trim();
+        var k = t.toUpperCase();
+        if(seen[k]) return;
+        seen[k] = true;
+        candidates.push(t);
+      });
+      candidates = candidates.slice(0, 6);
+      var list = document.getElementById('ocrCandidateList');
+      if(candidates.length === 0){
+        list.style.display = 'none';
+        toast('Aucun texte lisible détecté — tape-la à la main');
+      } else {
+        list.innerHTML = candidates.map(function(c){ return '<button class="candidate" data-ocr-ref="'+escapeHtml(c)+'">'+escapeHtml(c)+'</button>'; }).join('');
+        list.style.display = 'flex';
+      }
+    }).catch(function(e){
+      console.error(e);
+      toast('Lecture indisponible — connexion requise');
+    }).then(function(){
+      btn.disabled = false;
+      btn.innerHTML = original;
+    });
+  });
+  document.getElementById('ocrCandidateList').addEventListener('click', function(e){
+    var b = e.target.closest('[data-ocr-ref]'); if(!b) return;
+    document.getElementById('refInput').value = b.getAttribute('data-ocr-ref');
+  });
+
   document.getElementById('btnConfirmRef').addEventListener('click', function(){
     var val = normalizeRef(document.getElementById('refInput').value);
     if(!val){ toast('Entre un nom de référence'); return; }
@@ -2150,9 +2237,14 @@
   function renderCatalogList(){
     var wrap = document.getElementById('catalogList');
     var q = catalogFilterText.trim().toLowerCase();
+    var total = Object.keys(catalog).length;
     var codes = Object.keys(catalog).filter(function(c){
       return !q || c.toLowerCase().indexOf(q) !== -1 || catalog[c].toLowerCase().indexOf(q) !== -1;
     }).sort(function(a, b){ return naturalCompare(catalog[a], catalog[b]); });
+    var sub = document.getElementById('catalogSub');
+    sub.textContent = q
+      ? codes.length + ' / ' + total + ' correspondance(s) — filtré'
+      : total + ' correspondance(s) au total, partagées avec toute l\'équipe.';
     if(codes.length === 0){
       wrap.innerHTML = '<div class="empty-state"><p>' + (q
         ? 'Aucune correspondance ne contient "' + escapeHtml(catalogFilterText) + '".'
@@ -2217,6 +2309,9 @@
     });
   });
   document.getElementById('btnCloseCatalog').addEventListener('click', function(){
+    document.getElementById('catalogModal').classList.remove('show');
+  });
+  document.getElementById('btnCloseCatalogX').addEventListener('click', function(){
     document.getElementById('catalogModal').classList.remove('show');
   });
   document.getElementById('catalogBtn').addEventListener('click', function(){
@@ -2310,6 +2405,9 @@
     document.getElementById('historyModal').classList.add('show');
   });
   document.getElementById('btnCloseHistory').addEventListener('click', function(){
+    document.getElementById('historyModal').classList.remove('show');
+  });
+  document.getElementById('btnCloseHistoryX').addEventListener('click', function(){
     document.getElementById('historyModal').classList.remove('show');
   });
 
