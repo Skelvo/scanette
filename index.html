@@ -193,7 +193,12 @@
   .filter-row{ display:flex; gap:8px; align-items:center; margin-bottom:12px; }
   .search-field{ position:relative; flex:1; min-width:0; }
   .search-field-icon{ position:absolute; left:13px; top:50%; transform:translateY(-50%); color:var(--text-faint); pointer-events:none; }
-  .search-field .field{ margin-bottom:0; padding-left:38px; }
+  .search-field .field{ margin-bottom:0; padding-left:38px; padding-right:36px; }
+  .search-field-clear{
+    position:absolute; right:6px; top:50%; transform:translateY(-50%);
+    width:26px; height:26px; border-radius:50%; border:none; background:var(--surface-3);
+    color:var(--text-dim); font-size:13px; display:flex; align-items:center; justify-content:center; padding:0;
+  }
   .filter-row .field{ margin-bottom:0; flex:1; }
   .sort-toggle{
     flex-shrink:0; width:44px; height:44px; border-radius:var(--radius-sm); border:1px solid var(--line);
@@ -479,6 +484,7 @@
       <div class="search-field">
         <svg class="icon search-field-icon"><use href="#i-search"/></svg>
         <input class="field" id="listFilter" placeholder="Filtrer les références...">
+        <button class="search-field-clear" id="btnClearFilter" style="display:none;" title="Effacer">✕</button>
       </div>
       <button class="sort-toggle" id="btnSortToggle" title="Ordre de tri"></button>
     </div>
@@ -502,7 +508,7 @@
         <p><b>Catalogue</b> : voir, renommer, supprimer ou ajouter à la main toutes les correspondances code-barres → référence connues sur cet appareil.</p>
         <p><b>Historique</b> : chaque "Vider" garde une sauvegarde datée, consultable, exportable en CSV, ou restaurable sur la feuille en cours.</p>
         <p><b>Prénom</b> : sert à savoir qui a compté quoi (affiché sur les lignes et dans les exports), et à voir qui d'autre a l'app ouverte en même temps. <button id="btnChangeUserName" style="display:inline; background:none; border:none; padding:0; margin:0; font-size:12.5px; font-family:inherit; color:var(--accent); font-weight:700;">Ton prénom : <span id="userNameDisplay">(non défini)</span> — toucher pour changer</button></p>
-        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v49 — 17/09 17:40</b></p>
+        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v50 — 17/09 17:50</b></p>
       </div>
     </div>
   </main>
@@ -1348,10 +1354,7 @@
   }
   document.getElementById('lastScanChip').addEventListener('click', function(){
     if(!lastScanChipRef) return;
-    var input = document.getElementById('listFilter');
-    input.value = lastScanChipRef;
-    listFilterText = lastScanChipRef;
-    renderGroups();
+    setListFilter(lastScanChipRef);
   });
   function undoLastAction(){
     if(!lastAction) return;
@@ -1926,9 +1929,18 @@
     renderGroups(); updateSelectionBar();
   });
 
-  document.getElementById('listFilter').addEventListener('input', function(){
-    listFilterText = this.value;
+  function setListFilter(value){
+    listFilterText = value;
+    document.getElementById('listFilter').value = value;
+    document.getElementById('btnClearFilter').style.display = value ? 'flex' : 'none';
     renderGroups();
+  }
+  document.getElementById('listFilter').addEventListener('input', function(){
+    setListFilter(this.value);
+  });
+  document.getElementById('btnClearFilter').addEventListener('click', function(){
+    setListFilter('');
+    document.getElementById('listFilter').focus();
   });
 
   function renderSortToggle(){
