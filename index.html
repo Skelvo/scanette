@@ -487,7 +487,7 @@
         <p><b>Catalogue</b> : voir, renommer, supprimer ou ajouter à la main toutes les correspondances code-barres → référence connues sur cet appareil.</p>
         <p><b>Historique</b> : chaque "Vider" garde une sauvegarde datée, consultable, exportable en CSV, ou restaurable sur la feuille en cours.</p>
         <p><b>Prénom</b> : sert à savoir qui a compté quoi (affiché sur les lignes et dans les exports), et à voir qui d'autre a l'app ouverte en même temps. <button id="btnChangeUserName" style="display:inline; background:none; border:none; padding:0; margin:0; font-size:12.5px; font-family:inherit; color:var(--accent); font-weight:700;">Ton prénom : <span id="userNameDisplay">(non défini)</span> — toucher pour changer</button></p>
-        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v43 — 17/09 16:00</b></p>
+        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v44 — 17/09 16:15</b></p>
       </div>
     </div>
   </main>
@@ -532,9 +532,9 @@
   <div class="scan-bottom">
     <div class="quick-qty" id="quickQty">
       <div class="lbl" id="quickQtyLabel"></div>
-      <button data-add="2">+2</button>
-      <button data-add="5">+5</button>
-      <button data-add="10">+10</button>
+      <button data-add="2">×2</button>
+      <button data-add="5">×5</button>
+      <button data-add="10">×10</button>
       <button id="quickQtyCustom">✎ Autre</button>
     </div>
     <p id="scanHint">Cadre le code-barres dans la zone</p>
@@ -1271,18 +1271,10 @@
     clearTimeout(quickQtyTimer);
     quickQtyTimer = setTimeout(function(){ el.style.display = 'none'; }, 5000);
   }
-  function adjustQuickQty(n){
-    if(!quickQtyTarget) return;
-    var supplier = getSupplier(quickQtyTarget.supplierId);
-    var item = supplier && supplier.items.find(function(it){ return it.id === quickQtyTarget.itemId; });
-    if(!item) return;
-    var prevQty = item.qty;
-    item.qty = Math.max(0, item.qty + n);
-    finishQuickQtyAdjust(supplier, item, prevQty);
-  }
-  // Contrairement à adjustQuickQty (qui ajoute au total déjà affiché), fixe
-  // le total de ce scan à N pièces au total — pour un carton de N unités
-  // sous un seul code-barres, sans calcul mental à faire pour l'utilisateur.
+  // Fixe le total de ce scan à N pièces au total (pas "+N en plus du 1 déjà
+  // compté") — pour un carton de N unités sous un seul code-barres, aussi
+  // bien avec les boutons rapides +2/+5/+10 qu'avec "Autre", sans calcul
+  // mental à faire pour l'utilisateur.
   function setQuickQtyTotal(n){
     if(!quickQtyTarget) return;
     var supplier = getSupplier(quickQtyTarget.supplierId);
@@ -1349,7 +1341,7 @@
   document.getElementById('quickQty').addEventListener('click', function(e){
     var btn = e.target.closest('button'); if(!btn) return;
     var addN = btn.getAttribute('data-add');
-    if(addN){ adjustQuickQty(parseInt(addN, 10)); return; }
+    if(addN){ setQuickQtyTotal(parseInt(addN, 10)); return; }
     if(btn.id === 'quickQtyCustom'){
       pauseScanning();
       askInput('Combien de pièces au total dans ce carton ?', '', 'numeric').then(function(nv){
