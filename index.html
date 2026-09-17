@@ -487,7 +487,7 @@
         <p><b>Catalogue</b> : voir, renommer, supprimer ou ajouter à la main toutes les correspondances code-barres → référence connues sur cet appareil.</p>
         <p><b>Historique</b> : chaque "Vider" garde une sauvegarde datée, consultable, exportable en CSV, ou restaurable sur la feuille en cours.</p>
         <p><b>Prénom</b> : sert à savoir qui a compté quoi (affiché sur les lignes et dans les exports), et à voir qui d'autre a l'app ouverte en même temps. <button id="btnChangeUserName" style="display:inline; background:none; border:none; padding:0; margin:0; font-size:12.5px; font-family:inherit; color:var(--accent); font-weight:700;">Ton prénom : <span id="userNameDisplay">(non défini)</span> — toucher pour changer</button></p>
-        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v40 — 17/09 14:45</b></p>
+        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v41 — 17/09 15:10</b></p>
       </div>
     </div>
   </main>
@@ -715,6 +715,12 @@
   var scanStep = 1;
   var pendingCode = null; // barcode awaiting reference choice
   var lastDetected = { code: null, t: 0 };
+  // Exige 2 lectures consécutives identiques avant de valider un code —
+  // une lecture ponctuellement corrompue (angle, reflet, mouvement) ne se
+  // répète presque jamais deux fois d'affilée à l'identique, alors qu'un
+  // vrai code tenu face à la caméra se relit pareil sans problème.
+  var pendingConfirmCode = null;
+  var pendingConfirmCount = 0;
 
   function loadState(){
     try{
@@ -1072,7 +1078,7 @@
     var q = listFilterText.trim().toLowerCase();
     var groups = state.suppliers.map(function(s){
       var items = q ? s.items.filter(function(it){
-        return it.ref.toLowerCase().indexOf(q) !== -1 || (it.code && it.code.indexOf(q) !== -1);
+        return it.ref.toLowerCase().indexOf(q) !== -1 || itemCodes(it).some(function(c){ return c.indexOf(q) !== -1; });
       }) : s.items.slice();
       if(sortMode === 'alpha'){ items = items.slice().sort(function(a,b){ return naturalCompare(a.ref, b.ref); }); }
       return { supplier: s, items: items };
@@ -1099,7 +1105,9 @@
         html += '<div class="chk'+(checked?' on':'')+'" data-role="chk">'+(checked?'✓':'')+'</div>';
         html += '<div class="ref"><div class="r1">'+refBreakHtml(it.ref)+'</div>';
         html += '<button class="price-tag'+(it.price!=null?' set':'')+'" data-role="price">'+escapeHtml(priceLabel)+'</button>';
-        html += '<div class="r2">'+escapeHtml(it.code||'saisie manuelle')+(it.by?' · '+escapeHtml(it.by):'')+'</div></div>';
+        var itCodes = itemCodes(it);
+        var codesHtml = itCodes.length ? itCodes.map(function(c){ return escapeHtml(c); }).join('<br>') : 'saisie manuelle';
+        html += '<div class="r2">'+codesHtml+(it.by?' · '+escapeHtml(it.by):'')+'</div></div>';
         html += '<div class="qty-stepper">';
         html += '<button data-role="qdown">−</button>';
         html += '<div class="q" data-role="qval">'+it.qty+'</div>';
@@ -1146,11 +1154,26 @@
   }
 
   /* ================= Item ops ================= */
+  // Une même pièce peut avoir plusieurs codes-barres réels (lot, emballage
+  // différent...) tout en restant la même référence — un article garde
+  // donc TOUS les codes rencontrés dans "codes", "code" restant le premier
+  // (pour la compatibilité avec le reste du code, exports, catalogue...).
+  function itemCodes(item){
+    return item.codes || (item.code ? [item.code] : []);
+  }
+  function addCodeToItem(item, code){
+    if(!code) return;
+    var codes = itemCodes(item);
+    if(codes.indexOf(code) === -1) codes.push(code);
+    item.codes = codes;
+    item.code = codes[0];
+  }
+
   function findItemByCode(code){
     for(var i=0;i<state.suppliers.length;i++){
       var s = state.suppliers[i];
       for(var j=0;j<s.items.length;j++){
-        if(s.items[j].code === code) return { item:s.items[j], supplier:s };
+        if(itemCodes(s.items[j]).indexOf(code) !== -1) return { item:s.items[j], supplier:s };
       }
     }
     return null;
@@ -1160,17 +1183,25 @@
     refName = normalizeRef(refName);
     var supplier = state.activeSupplierId ? getSupplier(state.activeSupplierId) : ensureUngrouped();
     if(!supplier){ supplier = ensureUngrouped(); }
-    var existing = supplier.items.find(function(it){ return code ? it.code === code : it.ref.toLowerCase() === refName.toLowerCase(); });
+    var existing = supplier.items.find(function(it){ return code ? itemCodes(it).indexOf(code) !== -1 : it.ref.toLowerCase() === refName.toLowerCase(); });
+    // Un code neuf peut correspondre à une référence déjà comptée sous un
+    // AUTRE code-barres (lot/emballage différent, même pièce) : on
+    // fusionne dans cette ligne existante plutôt que d'en créer une
+    // séparée, et on garde la trace de ce nouveau code en plus.
+    if(!existing && code){
+      existing = supplier.items.find(function(it){ return it.ref.toLowerCase() === refName.toLowerCase(); });
+    }
     var item, wasNew, prevQty;
     if(existing){
       prevQty = existing.qty;
       existing.qty += scanStep;
       existing.by = currentUser || existing.by || null;
+      addCodeToItem(existing, code);
       item = existing;
       wasNew = false;
     } else {
       prevQty = 0;
-      item = { id: uid(), ref: refName, code: code || null, qty: scanStep, by: currentUser || null };
+      item = { id: uid(), ref: refName, code: code || null, codes: code ? [code] : [], qty: scanStep, by: currentUser || null };
       supplier.items.push(item);
       wasNew = true;
     }
@@ -1330,6 +1361,57 @@
   // ignorée sans erreur là où elle n'est pas supportée.
   var SCAN_CONSTRAINTS = { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 }, advanced: [{ focusMode: 'continuous' }] };
 
+  // On n'analyse que la zone du cadre de visée affiché à l'écran, pas
+  // l'image entière : moins de pixels à traiter à chaque tentative de
+  // lecture (donc moins de calcul, moins de chauffe), et en prime moins
+  // de parasites autour du code-barres visé. Calcule la zone du cadre
+  // (visible en CSS) en coordonnées pixels de la vraie image caméra,
+  // qui n'a pas forcément la même taille ni le même cadrage à l'écran
+  // (la vidéo "couvre" son conteneur en étant zoomée/centrée — cf. CSS
+  // #interactive video — et le slider de zoom ajoute encore un facteur).
+  // Une marge généreuse est gardée autour du cadre visible pour ne
+  // jamais couper un code qui dépasserait légèrement, ce qui donnait de
+  // fausses lectures lors d'un premier essai trop serré.
+  var scanCropCanvas = document.createElement('canvas');
+  function getScanCropRect(video){
+    var vw = video.videoWidth, vh = video.videoHeight;
+    if(!vw || !vh) return null;
+    var interactive = document.getElementById('interactive');
+    var frame = document.querySelector('.scan-frame');
+    var cRect = interactive.getBoundingClientRect();
+    var fRect = frame.getBoundingClientRect();
+    if(!cRect.width || !cRect.height) return null;
+    var coverScale = Math.max(cRect.width / vw, cRect.height / vh);
+    var zoom = parseFloat(video.style.getPropertyValue('--zoom')) || 1;
+    var totalScale = coverScale * zoom;
+    var dispW = vw * totalScale, dispH = vh * totalScale;
+    var videoLeft = cRect.left + cRect.width / 2 - dispW / 2;
+    var videoTop = cRect.top + cRect.height / 2 - dispH / 2;
+    var pad = 1.6;
+    var fw = fRect.width * pad, fh = fRect.height * pad;
+    var fx = fRect.left + fRect.width / 2 - fw / 2;
+    var fy = fRect.top + fRect.height / 2 - fh / 2;
+    var sx = (fx - videoLeft) / totalScale;
+    var sy = (fy - videoTop) / totalScale;
+    var sw = fw / totalScale;
+    var sh = fh / totalScale;
+    sx = Math.max(0, Math.min(sx, vw - 1));
+    sy = Math.max(0, Math.min(sy, vh - 1));
+    sw = Math.max(1, Math.min(sw, vw - sx));
+    sh = Math.max(1, Math.min(sh, vh - sy));
+    return { sx: sx, sy: sy, sw: sw, sh: sh };
+  }
+  // Repli sur l'image entière si jamais le calcul échoue (mise en page
+  // pas encore stabilisée, etc.) — ne doit jamais empêcher de scanner.
+  function cropVideoFrame(video){
+    var rect = getScanCropRect(video);
+    if(!rect) return video;
+    scanCropCanvas.width = rect.sw;
+    scanCropCanvas.height = rect.sh;
+    scanCropCanvas.getContext('2d').drawImage(video, rect.sx, rect.sy, rect.sw, rect.sh, 0, 0, rect.sw, rect.sh);
+    return scanCropCanvas;
+  }
+
   function flashScan(ok){
     var f = document.getElementById('scanFlash');
     f.style.background = ok ? 'var(--success)' : 'var(--accent)';
@@ -1399,11 +1481,11 @@
         scanState.timer = setInterval(function(){
           if(detectBusy || scanningPaused) return;
           detectBusy = true;
-          barcodeDetector.detect(video).then(function(codes){
+          barcodeDetector.detect(cropVideoFrame(video)).then(function(codes){
             detectBusy = false;
             if(codes && codes.length){ onDetectedCode(codes[0].rawValue); }
           }).catch(function(){ detectBusy = false; });
-        }, 200);
+        }, 300);
       })
       .catch(function(err){ toast('Impossible d\'accéder à la caméra'); console.error(err); });
   }
@@ -1444,18 +1526,53 @@
         // décodage (ms). Sans le préciser explicitement, cette librairie
         // JS pure peut retenter beaucoup plus souvent que nécessaire —
         // un code-barres n'a pas besoin d'être relu 30 fois par seconde.
-        if(!codeReader) codeReader = new ZXing.BrowserMultiFormatReader(undefined, 400);
-        scanState.mode = 'zxing';
-        codeReader.decodeFromConstraints(
-          { video: SCAN_CONSTRAINTS },
-          video,
-          function(result){ if(result && !scanningPaused) onDetectedCode(result.getText()); }
-        ).then(function(){
-          var track = video.srcObject && video.srcObject.getVideoTracks()[0];
-          if(track) setupCameraControls(track);
-        }).catch(function(err){ toast('Impossible d\'accéder à la caméra'); console.error(err); });
-      }catch(e){ toast('Scanner indisponible'); console.error(e); }
+        if(!codeReader) codeReader = new ZXing.BrowserMultiFormatReader(undefined, 500);
+      }catch(e){ toast('Scanner indisponible'); console.error(e); return; }
+      // decodeFromCanvas permet de ne lire que la zone recadrée (comme le
+      // scan natif) plutôt que l'image entière — mais si jamais cette
+      // méthode n'existe pas sur la version chargée, on retombe sans
+      // casser le scan sur l'ancien mode (image entière, géré par la
+      // librairie elle-même), plutôt que de risquer une lecture muette.
+      if(typeof codeReader.decodeFromCanvas === 'function'){
+        startZXingScanCropped(video);
+      } else {
+        startZXingScanFullFrame(video);
+      }
     });
+  }
+  function startZXingScanCropped(video){
+    scanState.mode = 'zxing';
+    navigator.mediaDevices.getUserMedia({ video: SCAN_CONSTRAINTS })
+      .then(function(stream){
+        scanState.stream = stream;
+        video.srcObject = stream;
+        setupCameraControls(stream.getVideoTracks()[0]);
+        scanState.timer = setInterval(function(){
+          if(detectBusy || scanningPaused || !video.videoWidth) return;
+          detectBusy = true;
+          try{
+            var result = codeReader.decodeFromCanvas(cropVideoFrame(video));
+            detectBusy = false;
+            if(result) onDetectedCode(result.getText());
+          }catch(e){
+            detectBusy = false;
+            // NotFoundException (aucun code sur cette image) : normal, on
+            // retente à la prochaine image, rien à signaler.
+          }
+        }, 500);
+      })
+      .catch(function(err){ toast('Impossible d\'accéder à la caméra'); console.error(err); });
+  }
+  function startZXingScanFullFrame(video){
+    scanState.mode = 'zxing';
+    codeReader.decodeFromConstraints(
+      { video: SCAN_CONSTRAINTS },
+      video,
+      function(result){ if(result && !scanningPaused) onDetectedCode(result.getText()); }
+    ).then(function(){
+      var track = video.srcObject && video.srcObject.getVideoTracks()[0];
+      if(track) setupCameraControls(track);
+    }).catch(function(err){ toast('Impossible d\'accéder à la caméra'); console.error(err); });
   }
 
   // Flash/torche : très utile sur étiquettes brillantes, sombres ou mal éclairées.
@@ -1497,6 +1614,15 @@
     if(!code) return;
     var now = Date.now();
     if(code === lastDetected.code && (now - lastDetected.t) < 1500) return;
+    if(code === pendingConfirmCode){
+      pendingConfirmCount++;
+    } else {
+      pendingConfirmCode = code;
+      pendingConfirmCount = 1;
+    }
+    if(pendingConfirmCount < 2) return; // pas encore confirmé par une deuxième lecture identique
+    pendingConfirmCode = null;
+    pendingConfirmCount = 0;
     lastDetected = { code: code, t: now };
     if(navigator.vibrate) navigator.vibrate(60);
     beep();
@@ -1520,6 +1646,8 @@
     quickQtyTarget = null;
     scanningPaused = false;
     scanState.mode = null;
+    pendingConfirmCode = null;
+    pendingConfirmCount = 0;
   }
   document.getElementById('btnScan').addEventListener('click', startScan);
   document.getElementById('btnCloseScan').addEventListener('click', stopScan);
@@ -1745,7 +1873,11 @@
         val = normalizeRef(val);
         if(val === null || !val) return;
         item.ref = val;
-        if(item.code){ catalog[item.code] = val; saveCatalog(); writeCatalogEntry(item.code, val); }
+        // Un article peut avoir plusieurs codes-barres (lots différents,
+        // même pièce) : le renommage doit mettre à jour le catalogue pour
+        // chacun d'eux, pas juste le premier.
+        itemCodes(item).forEach(function(c){ catalog[c] = val; writeCatalogEntry(c, val); });
+        saveCatalog();
         saveState(); renderAll();
       });
       return;
@@ -1954,7 +2086,7 @@
       s.items.forEach(function(it){
         var pu = it.price != null ? it.price.toFixed(2) : '';
         var tot = it.price != null ? (it.price * it.qty).toFixed(2) : '';
-        lines.push(csvRow([s.name, it.ref, it.code||'', it.qty, pu, tot, it.by||'']));
+        lines.push(csvRow([s.name, it.ref, itemCodes(it).join(' / '), it.qty, pu, tot, it.by||'']));
       });
     });
     var blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv' });
@@ -2290,7 +2422,7 @@
     var lines = [csvRow(['Fournisseur','Référence','Code','Quantité','Compté par'])];
     entry.suppliers.forEach(function(s){
       s.items.forEach(function(it){
-        lines.push(csvRow([s.name, it.ref, it.code||'', it.qty, it.by||'']));
+        lines.push(csvRow([s.name, it.ref, itemCodes(it).join(' / '), it.qty, it.by||'']));
       });
     });
     var blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv' });
