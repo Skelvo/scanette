@@ -487,7 +487,7 @@
         <p><b>Catalogue</b> : voir, renommer, supprimer ou ajouter à la main toutes les correspondances code-barres → référence connues sur cet appareil.</p>
         <p><b>Historique</b> : chaque "Vider" garde une sauvegarde datée, consultable, exportable en CSV, ou restaurable sur la feuille en cours.</p>
         <p><b>Prénom</b> : sert à savoir qui a compté quoi (affiché sur les lignes et dans les exports), et à voir qui d'autre a l'app ouverte en même temps. <button id="btnChangeUserName" style="display:inline; background:none; border:none; padding:0; margin:0; font-size:12.5px; font-family:inherit; color:var(--accent); font-weight:700;">Ton prénom : <span id="userNameDisplay">(non défini)</span> — toucher pour changer</button></p>
-        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v38 — 17/09 12:20</b></p>
+        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v39 — 17/09 12:45</b></p>
       </div>
     </div>
   </main>
@@ -1330,6 +1330,56 @@
   // ignorée sans erreur là où elle n'est pas supportée.
   var SCAN_CONSTRAINTS = { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 }, advanced: [{ focusMode: 'continuous' }] };
 
+  // On n'analyse que la zone du cadre de visée affiché à l'écran, pas
+  // l'image entière : moins de pixels à traiter à chaque tentative de
+  // lecture (donc moins de calcul, moins de chauffe), et en prime moins
+  // de parasites autour du code-barres visé. Calcule la zone du cadre
+  // (visible en CSS) en coordonnées pixels de la vraie image caméra,
+  // qui n'a pas forcément la même taille ni le même cadrage à l'écran
+  // (la vidéo "couvre" son conteneur en étant zoomée/centrée — cf. CSS
+  // #interactive video — et le slider de zoom ajoute encore un facteur).
+  var scanCropCanvas = document.createElement('canvas');
+  function getScanCropRect(video){
+    var vw = video.videoWidth, vh = video.videoHeight;
+    if(!vw || !vh) return null;
+    var interactive = document.getElementById('interactive');
+    var frame = document.querySelector('.scan-frame');
+    var cRect = interactive.getBoundingClientRect();
+    var fRect = frame.getBoundingClientRect();
+    if(!cRect.width || !cRect.height) return null;
+    var coverScale = Math.max(cRect.width / vw, cRect.height / vh);
+    var zoom = parseFloat(video.style.getPropertyValue('--zoom')) || 1;
+    var totalScale = coverScale * zoom;
+    var dispW = vw * totalScale, dispH = vh * totalScale;
+    var videoLeft = cRect.left + cRect.width / 2 - dispW / 2;
+    var videoTop = cRect.top + cRect.height / 2 - dispH / 2;
+    // Léger surplus autour du cadre visible, au cas où le code dépasse
+    // un peu du cadre sans être mal centré pour autant.
+    var pad = 1.2;
+    var fw = fRect.width * pad, fh = fRect.height * pad;
+    var fx = fRect.left + fRect.width / 2 - fw / 2;
+    var fy = fRect.top + fRect.height / 2 - fh / 2;
+    var sx = (fx - videoLeft) / totalScale;
+    var sy = (fy - videoTop) / totalScale;
+    var sw = fw / totalScale;
+    var sh = fh / totalScale;
+    sx = Math.max(0, Math.min(sx, vw - 1));
+    sy = Math.max(0, Math.min(sy, vh - 1));
+    sw = Math.max(1, Math.min(sw, vw - sx));
+    sh = Math.max(1, Math.min(sh, vh - sy));
+    return { sx: sx, sy: sy, sw: sw, sh: sh };
+  }
+  // Repli sur l'image entière si jamais le calcul échoue (mise en page
+  // pas encore stabilisée, etc.) — ne doit jamais empêcher de scanner.
+  function cropVideoFrame(video){
+    var rect = getScanCropRect(video);
+    if(!rect) return video;
+    scanCropCanvas.width = rect.sw;
+    scanCropCanvas.height = rect.sh;
+    scanCropCanvas.getContext('2d').drawImage(video, rect.sx, rect.sy, rect.sw, rect.sh, 0, 0, rect.sw, rect.sh);
+    return scanCropCanvas;
+  }
+
   function flashScan(ok){
     var f = document.getElementById('scanFlash');
     f.style.background = ok ? 'var(--success)' : 'var(--accent)';
@@ -1399,7 +1449,7 @@
         scanState.timer = setInterval(function(){
           if(detectBusy || scanningPaused) return;
           detectBusy = true;
-          barcodeDetector.detect(video).then(function(codes){
+          barcodeDetector.detect(cropVideoFrame(video)).then(function(codes){
             detectBusy = false;
             if(codes && codes.length){ onDetectedCode(codes[0].rawValue); }
           }).catch(function(){ detectBusy = false; });
@@ -1445,17 +1495,52 @@
         // JS pure peut retenter beaucoup plus souvent que nécessaire —
         // un code-barres n'a pas besoin d'être relu 30 fois par seconde.
         if(!codeReader) codeReader = new ZXing.BrowserMultiFormatReader(undefined, 400);
-        scanState.mode = 'zxing';
-        codeReader.decodeFromConstraints(
-          { video: SCAN_CONSTRAINTS },
-          video,
-          function(result){ if(result && !scanningPaused) onDetectedCode(result.getText()); }
-        ).then(function(){
-          var track = video.srcObject && video.srcObject.getVideoTracks()[0];
-          if(track) setupCameraControls(track);
-        }).catch(function(err){ toast('Impossible d\'accéder à la caméra'); console.error(err); });
-      }catch(e){ toast('Scanner indisponible'); console.error(e); }
+      }catch(e){ toast('Scanner indisponible'); console.error(e); return; }
+      // decodeFromCanvas permet de ne lire que la zone recadrée (comme le
+      // scan natif) plutôt que l'image entière — mais si jamais cette
+      // méthode n'existe pas sur la version chargée, on retombe sans
+      // casser le scan sur l'ancien mode (image entière, géré par la
+      // librairie elle-même), plutôt que de risquer une lecture muette.
+      if(typeof codeReader.decodeFromCanvas === 'function'){
+        startZXingScanCropped(video);
+      } else {
+        startZXingScanFullFrame(video);
+      }
     });
+  }
+  function startZXingScanCropped(video){
+    scanState.mode = 'zxing';
+    navigator.mediaDevices.getUserMedia({ video: SCAN_CONSTRAINTS })
+      .then(function(stream){
+        scanState.stream = stream;
+        video.srcObject = stream;
+        setupCameraControls(stream.getVideoTracks()[0]);
+        scanState.timer = setInterval(function(){
+          if(detectBusy || scanningPaused || !video.videoWidth) return;
+          detectBusy = true;
+          try{
+            var result = codeReader.decodeFromCanvas(cropVideoFrame(video));
+            detectBusy = false;
+            if(result) onDetectedCode(result.getText());
+          }catch(e){
+            detectBusy = false;
+            // NotFoundException (aucun code sur cette image) : normal, on
+            // retente à la prochaine image, rien à signaler.
+          }
+        }, 400);
+      })
+      .catch(function(err){ toast('Impossible d\'accéder à la caméra'); console.error(err); });
+  }
+  function startZXingScanFullFrame(video){
+    scanState.mode = 'zxing';
+    codeReader.decodeFromConstraints(
+      { video: SCAN_CONSTRAINTS },
+      video,
+      function(result){ if(result && !scanningPaused) onDetectedCode(result.getText()); }
+    ).then(function(){
+      var track = video.srcObject && video.srcObject.getVideoTracks()[0];
+      if(track) setupCameraControls(track);
+    }).catch(function(err){ toast('Impossible d\'accéder à la caméra'); console.error(err); });
   }
 
   // Flash/torche : très utile sur étiquettes brillantes, sombres ou mal éclairées.
