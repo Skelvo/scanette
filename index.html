@@ -487,7 +487,7 @@
         <p><b>Catalogue</b> : voir, renommer, supprimer ou ajouter à la main toutes les correspondances code-barres → référence connues sur cet appareil.</p>
         <p><b>Historique</b> : chaque "Vider" garde une sauvegarde datée, consultable, exportable en CSV, ou restaurable sur la feuille en cours.</p>
         <p><b>Prénom</b> : sert à savoir qui a compté quoi (affiché sur les lignes et dans les exports), et à voir qui d'autre a l'app ouverte en même temps. <button id="btnChangeUserName" style="display:inline; background:none; border:none; padding:0; margin:0; font-size:12.5px; font-family:inherit; color:var(--accent); font-weight:700;">Ton prénom : <span id="userNameDisplay">(non défini)</span> — toucher pour changer</button></p>
-        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v42 — 17/09 15:35</b></p>
+        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v43 — 17/09 16:00</b></p>
       </div>
     </div>
   </main>
@@ -1254,11 +1254,17 @@
   /* ================= Pastille "quantité rapide" après un scan ================= */
   var quickQtyTarget = null; // {supplierId, itemId}
   var quickQtyTimer = null;
+  // Quantité de l'article juste AVANT ce scan précis (donc avant le +1/+scanStep
+  // déjà appliqué) — sert de base à "Autre" pour que taper "10" (le contenu
+  // réel du carton) mette bien un total de 10 pour ce scan, sans avoir à
+  // calculer 10 moins le 1 déjà compté.
+  var quickQtyBaseQty = 0;
   function showQuickQty(supplierId, itemId){
     quickQtyTarget = { supplierId: supplierId, itemId: itemId };
     var supplier = getSupplier(supplierId);
     var item = supplier && supplier.items.find(function(it){ return it.id === itemId; });
     if(!item) return;
+    quickQtyBaseQty = Math.max(0, item.qty - scanStep);
     document.getElementById('quickQtyLabel').textContent = '✓ ' + item.ref + '  ·  qté ' + item.qty;
     var el = document.getElementById('quickQty');
     el.style.display = 'flex';
@@ -1272,6 +1278,21 @@
     if(!item) return;
     var prevQty = item.qty;
     item.qty = Math.max(0, item.qty + n);
+    finishQuickQtyAdjust(supplier, item, prevQty);
+  }
+  // Contrairement à adjustQuickQty (qui ajoute au total déjà affiché), fixe
+  // le total de ce scan à N pièces au total — pour un carton de N unités
+  // sous un seul code-barres, sans calcul mental à faire pour l'utilisateur.
+  function setQuickQtyTotal(n){
+    if(!quickQtyTarget) return;
+    var supplier = getSupplier(quickQtyTarget.supplierId);
+    var item = supplier && supplier.items.find(function(it){ return it.id === quickQtyTarget.itemId; });
+    if(!item) return;
+    var prevQty = item.qty;
+    item.qty = Math.max(0, quickQtyBaseQty + n);
+    finishQuickQtyAdjust(supplier, item, prevQty);
+  }
+  function finishQuickQtyAdjust(supplier, item, prevQty){
     // Cohérent avec le bouton "−" de la liste : à 0, l'article est retiré au
     // lieu de laisser une ligne fantôme à quantité 0 dans la feuille.
     if(item.qty === 0){ supplier.items = supplier.items.filter(function(it){ return it.id !== item.id; }); }
@@ -1331,11 +1352,11 @@
     if(addN){ adjustQuickQty(parseInt(addN, 10)); return; }
     if(btn.id === 'quickQtyCustom'){
       pauseScanning();
-      askInput('Ajouter combien de pièces ?', '1', 'numeric').then(function(nv){
+      askInput('Combien de pièces au total dans ce carton ?', '', 'numeric').then(function(nv){
         resumeScanning();
-        if(nv === null) return;
+        if(nv === null || nv === '') return;
         nv = parseInt(nv, 10);
-        if(!isNaN(nv) && nv !== 0) adjustQuickQty(nv);
+        if(!isNaN(nv) && nv >= 0) setQuickQtyTotal(nv);
       });
     }
   });
