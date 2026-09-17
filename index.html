@@ -491,7 +491,7 @@
         <p><b>Catalogue</b> : voir, renommer, supprimer ou ajouter à la main toutes les correspondances code-barres → référence connues sur cet appareil.</p>
         <p><b>Historique</b> : chaque "Vider" garde une sauvegarde datée, consultable, exportable en CSV, ou restaurable sur la feuille en cours.</p>
         <p><b>Prénom</b> : sert à savoir qui a compté quoi (affiché sur les lignes et dans les exports), et à voir qui d'autre a l'app ouverte en même temps. <button id="btnChangeUserName" style="display:inline; background:none; border:none; padding:0; margin:0; font-size:12.5px; font-family:inherit; color:var(--accent); font-weight:700;">Ton prénom : <span id="userNameDisplay">(non défini)</span> — toucher pour changer</button></p>
-        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v30 — 17/09 09:00</b></p>
+        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v31 — 17/09 09:20</b></p>
       </div>
     </div>
   </main>
@@ -553,7 +553,7 @@
     <div class="scanned-code" id="refModalCode"></div>
     <p class="sub" id="ocrStatus">Lecture de l'étiquette en cours…</p>
     <div class="candidate-list" id="ocrCandidateList" style="display:none;"></div>
-    <input class="field" id="refInput" placeholder="Nom de la référence">
+    <input class="field" id="refInput" placeholder="Nom de la référence" autocapitalize="characters">
     <button class="btn-secondary" id="btnSearchOnline"><svg class="icon"><use href="#i-search"/></svg> Chercher ce code en ligne</button>
     <button class="btn-primary" style="margin-top:10px;" id="btnConfirmRef">OK</button>
     <button class="btn-secondary" id="btnSkipRef">Plus tard</button>
@@ -588,7 +588,7 @@
     <h2>Référence sans code-barres</h2>
     <p class="sub">Tape la référence lue sur l'étiquette, valide, puis enchaîne la suivante.</p>
     <div class="supplier-current active" id="photoRefSupplier" style="margin-bottom:12px;"></div>
-    <input class="field" id="photoRefInput" placeholder="Référence">
+    <input class="field" id="photoRefInput" placeholder="Référence" autocapitalize="characters">
     <button class="btn-primary" id="btnAddPhotoRef"><svg class="icon"><use href="#i-plus"/></svg> Ajouter et continuer</button>
     <button class="btn-secondary" id="btnDonePhotoRef">Terminer</button>
   </div>
@@ -1527,8 +1527,19 @@
   document.getElementById('stepUp').addEventListener('click', function(){ scanStep = Math.min(99, scanStep+1); renderStep(); });
   document.getElementById('stepDown').addEventListener('click', function(){ scanStep = Math.max(1, scanStep-1); renderStep(); });
 
+  // Une référence est toujours en majuscules, quoi qu'on tape — évite de
+  // jongler avec la touche Maj en plein milieu d'une saisie type "NTH1071".
+  function forceUppercaseOnInput(el){
+    el.addEventListener('input', function(){
+      var pos = this.selectionStart;
+      this.value = this.value.toUpperCase();
+      if(pos != null) this.setSelectionRange(pos, pos);
+    });
+  }
+
   /* ================= Référence inconnue modal ================= */
   var $refModal = document.getElementById('refModal');
+  forceUppercaseOnInput(document.getElementById('refInput'));
   function openRefModal(code){
     scanningPaused = true;
     pendingCode = code;
@@ -1566,7 +1577,11 @@
       return Tesseract.createWorker('eng');
     }).then(function(w){
       return w.setParameters({
-        tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-./ '
+        tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-./ ',
+        // "11" = texte épars, sans structure de page à analyser : plus
+        // rapide que le mode par défaut qui essaie de comprendre la mise
+        // en page complète (colonnes, paragraphes...) inutile ici.
+        tessedit_pageseg_mode: '11'
       }).then(function(){ ocrWorker = w; return w; });
     });
   }
@@ -1579,7 +1594,7 @@
     // faire tourner l'OCR sur une image aussi grande fait chauffer le
     // téléphone pour rien : un gros numéro imprimé reste largement lisible
     // en bien plus petit, donc on réduit fortement l'image avant analyse.
-    var maxDim = 700;
+    var maxDim = 480;
     var scale = Math.min(1, maxDim / Math.max(video.videoWidth, video.videoHeight));
     var canvas = document.createElement('canvas');
     canvas.width = Math.round(video.videoWidth * scale);
@@ -1627,7 +1642,7 @@
         // Le plus gros candidat pré-remplit direct le champ (à corriger si
         // besoin) — pas la peine de toucher quoi que ce soit si c'est bon.
         var refInput = document.getElementById('refInput');
-        if(!refInput.value) refInput.value = candidates[0];
+        if(!refInput.value) refInput.value = candidates[0].toUpperCase();
         status.textContent = 'Référence lue automatiquement — vérifie, ou touche-en une autre ci-dessous.';
       }
     }).catch(function(e){
@@ -1638,7 +1653,7 @@
   }
   document.getElementById('ocrCandidateList').addEventListener('click', function(e){
     var b = e.target.closest('[data-ocr-ref]'); if(!b) return;
-    document.getElementById('refInput').value = b.getAttribute('data-ocr-ref');
+    document.getElementById('refInput').value = b.getAttribute('data-ocr-ref').toUpperCase();
   });
 
   document.getElementById('btnConfirmRef').addEventListener('click', function(){
@@ -1745,6 +1760,7 @@
 
   /* ================= Photo référence (texte seul) ================= */
   var $photoRefModal = document.getElementById('photoRefModal');
+  forceUppercaseOnInput(document.getElementById('photoRefInput'));
   document.getElementById('btnPhotoRef').addEventListener('click', function(){
     var s = state.activeSupplierId ? getSupplier(state.activeSupplierId) : null;
     document.getElementById('photoRefSupplier').textContent = s ? s.name : '— aucun fournisseur —';
@@ -1816,7 +1832,7 @@
       return;
     }
     if(role === 'editRef'){
-      askInput('Renommer la référence', item.ref, 'text').then(function(val){
+      askInput('Renommer la référence', item.ref, 'text', true).then(function(val){
         val = normalizeRef(val);
         if(val === null || !val) return;
         item.ref = val;
@@ -1934,17 +1950,26 @@
   // fenêtres. Cette modale maison fait la même chose sans ces surprises.
   var $inputModal = document.getElementById('inputModal');
   var inputModalResolve = null;
-  function askInput(title, defaultValue, inputMode){
+  var inputModalForceUpper = false;
+  function askInput(title, defaultValue, inputMode, forceUpper){
     return new Promise(function(resolve){
       document.getElementById('inputModalTitle').textContent = title;
       var field = document.getElementById('inputModalField');
-      field.value = defaultValue || '';
+      inputModalForceUpper = !!forceUpper;
+      field.value = forceUpper ? String(defaultValue || '').toUpperCase() : (defaultValue || '');
       field.setAttribute('inputmode', inputMode || 'text');
+      field.setAttribute('autocapitalize', forceUpper ? 'characters' : 'sentences');
       inputModalResolve = resolve;
       $inputModal.classList.add('show');
       setTimeout(function(){ field.focus(); field.select(); }, 200);
     });
   }
+  document.getElementById('inputModalField').addEventListener('input', function(){
+    if(!inputModalForceUpper) return;
+    var pos = this.selectionStart;
+    this.value = this.value.toUpperCase();
+    if(pos != null) this.setSelectionRange(pos, pos);
+  });
   function resolveInputModal(value){
     $inputModal.classList.remove('show');
     var r = inputModalResolve; inputModalResolve = null;
@@ -2264,7 +2289,7 @@
     var role = e.target.closest('[data-role]');
     role = role ? role.getAttribute('data-role') : null;
     if(role === 'editCatalog'){
-      askInput('Renommer la référence du code ' + code, catalog[code], 'text').then(function(val){
+      askInput('Renommer la référence du code ' + code, catalog[code], 'text', true).then(function(val){
         val = normalizeRef(val);
         if(!val) return;
         catalog[code] = val;
@@ -2290,7 +2315,7 @@
     askInput('Code-barres', '', 'numeric').then(function(code){
       code = code == null ? '' : code.trim();
       if(!code) return;
-      askInput('Référence pour le code ' + code, catalog[code] || '', 'text').then(function(ref){
+      askInput('Référence pour le code ' + code, catalog[code] || '', 'text', true).then(function(ref){
         ref = normalizeRef(ref);
         if(!ref) return;
         catalog[code] = ref;
