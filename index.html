@@ -403,6 +403,7 @@
     <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M4 12a8 8 0 0 1 14-5.3M20 12a8 8 0 0 1-14 5.3"/><path d="M18 4v4h-4M6 20v-4h4"/></symbol>
     <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6 7l1 13h10l1-13"/></symbol>
     <symbol id="i-inbox" viewBox="0 0 24 24"><path d="M4 12h4l2 3h4l2-3h4"/><path d="M6 5h12l2 7v7H4v-7l2-7Z"/></symbol>
+    <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s7-6.7 7-11.5A7 7 0 0 0 5 9.5C5 14.3 12 21 12 21Z"/><circle cx="12" cy="9.5" r="2.4"/></symbol>
   </defs>
 </svg>
 
@@ -435,6 +436,7 @@
       <div class="head-actions">
         <div class="sync-dot off" id="syncDot" title="Catalogue partagé : hors ligne"><svg class="icon"><use href="#i-cloud"/></svg></div>
         <button class="icon-btn" id="catalogBtn" title="Catalogue"><svg class="icon"><use href="#i-book"/></svg></button>
+        <button class="icon-btn" id="locationsBtn" title="Où est cette référence ?"><svg class="icon"><use href="#i-pin"/></svg></button>
         <button class="icon-btn" id="historyBtn" title="Historique"><svg class="icon"><use href="#i-clock"/></svg></button>
         <button class="icon-btn" id="themeBtn" title="Thème"><svg class="icon"><use href="#i-theme"/></svg></button>
         <button class="icon-btn" id="lockBtn" title="Verrouiller"><svg class="icon"><use href="#i-power"/></svg></button>
@@ -506,9 +508,10 @@
         <p><b>Annuler</b> apparaît après chaque scan ou changement de quantité, pour revenir en arrière en un geste.</p>
         <p><b>Synchro</b> : le catalogue code-barres → référence est partagé avec toute l'équipe en temps réel. Dès que quelqu'un identifie un code, tout le monde le voit. Les quantités et fournisseurs restent, eux, propres à cet appareil.</p>
         <p><b>Catalogue</b> : voir, renommer, supprimer ou ajouter à la main toutes les correspondances code-barres → référence connues sur cet appareil.</p>
+        <p><b>Emplacements</b> : associe à une référence un ou plusieurs codes de rangement (ex. a1b = allée A, rayon 1, part B). Touche le tag sous une référence, ou l'icône épingle dans l'en-tête pour chercher où est rangée n'importe quelle référence, même hors de la feuille en cours. Partagé avec toute l'équipe en temps réel.</p>
         <p><b>Historique</b> : chaque "Vider" garde une sauvegarde datée, consultable, exportable en CSV, ou restaurable sur la feuille en cours.</p>
         <p><b>Prénom</b> : sert à savoir qui a compté quoi (affiché sur les lignes et dans les exports), et à voir qui d'autre a l'app ouverte en même temps. <button id="btnChangeUserName" style="display:inline; background:none; border:none; padding:0; margin:0; font-size:12.5px; font-family:inherit; color:var(--accent); font-weight:700;">Ton prénom : <span id="userNameDisplay">(non défini)</span> — toucher pour changer</button></p>
-        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v50 — 17/09 17:50</b></p>
+        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v51 — 18/09</b></p>
       </div>
     </div>
   </main>
@@ -625,6 +628,21 @@
   </div>
 </div>
 
+<!-- Emplacements modal -->
+<div class="modal-backdrop" id="locationsModal">
+  <div class="sheet" style="max-height:90vh;">
+    <div class="sheet-head"><h2>Emplacements</h2><button class="row-icon-btn" id="btnCloseLocationsX" title="Fermer">✕</button></div>
+    <p class="sub">Cherche une référence ou un code-barres pour savoir où elle est rangée en rayon (ex. a1b).</p>
+    <div class="search-field">
+      <svg class="icon search-field-icon"><use href="#i-search"/></svg>
+      <input class="field" id="locationsFilter" placeholder="Référence ou code-barres...">
+    </div>
+    <div id="locationsList"></div>
+    <button class="btn-secondary" id="btnAddLocationEntry"><svg class="icon"><use href="#i-plus"/></svg> Ajouter une référence</button>
+    <button class="btn-secondary" id="btnCloseLocations">Fermer</button>
+  </div>
+</div>
+
 <!-- Historique modal -->
 <div class="modal-backdrop" id="historyModal">
   <div class="sheet" style="max-height:90vh;">
@@ -677,6 +695,7 @@
   /* ================= State ================= */
   var STORE_KEY = 'scanette_data_v1';
   var CATALOG_KEY = 'scanette_catalog_v1';
+  var LOCATIONS_KEY = 'scanette_locations_v1';
   var PIN_KEY = 'scanette_pin_v1';
   var THEME_KEY = 'scanette_theme_v1';
   var SORT_KEY = 'scanette_sort_v1';
@@ -685,6 +704,7 @@
 
   var state = loadState();
   var catalog = loadCatalog(); // { code: refName } — local cache; source of truth is the shared db when connected
+  var locations = loadLocations(); // { ref: [emplacement, ...] } — répertoire à part, indépendant de l'inventaire courant
   var history = loadHistory(); // sauvegardes automatiques créées à chaque "Vider"
   var selected = new Set();
   var listFilterText = '';
@@ -762,6 +782,36 @@
   }
   function saveCatalog(){
     try{ localStorage.setItem(CATALOG_KEY, JSON.stringify(catalog)); }catch(e){}
+  }
+  function loadLocations(){
+    try{
+      var raw = localStorage.getItem(LOCATIONS_KEY);
+      if(raw) return JSON.parse(raw);
+    }catch(e){}
+    return {};
+  }
+  function saveLocations(){
+    try{ localStorage.setItem(LOCATIONS_KEY, JSON.stringify(locations)); }catch(e){}
+  }
+  // Emplacements en minuscules (a1b) : convention déjà utilisée à l'atelier,
+  // volontairement différente de la casse des références (forcées en
+  // majuscules ailleurs dans l'app).
+  function parseLocationInput(raw){
+    return String(raw==null?'':raw).toLowerCase().split(/[\s,;/]+/).map(function(s){ return s.trim(); }).filter(Boolean);
+  }
+  function setLocationForRef(ref, rawInput){
+    ref = normalizeRef(ref);
+    if(!ref) return;
+    var codes = parseLocationInput(rawInput);
+    if(codes.length === 0){
+      delete locations[ref];
+      saveLocations();
+      deleteLocationEntry(ref);
+    } else {
+      locations[ref] = codes;
+      saveLocations();
+      writeLocationEntry(ref, codes);
+    }
   }
   function loadHistory(){
     try{
@@ -844,6 +894,7 @@
         catalogMigrated = true;
         migrateLocalCatalogToDb(existingCodes);
       }
+      initSharedLocations();
     }catch(e){
       console.error(e);
       db = null;
@@ -902,6 +953,68 @@
   function deleteCatalogEntry(code){
     if(!db || !code) return;
     db.from('catalog').delete().eq('code', String(code))
+      .then(function(res){ if(res.error) console.error(res.error); });
+  }
+
+  /* ================= Emplacements partagés (Supabase) ================= */
+  // Répertoire séparé du catalogue code → référence : table "locations"
+  // (ref text primary key, locs jsonb, updated_at). Table à créer dans le
+  // même projet Supabase que "catalog" — voir README pour le SQL, le
+  // realtime doit aussi être activé dessus comme pour "catalog".
+  var locationsMigrated = false;
+  function migrateLocalLocationsToDb(existingRefs){
+    Object.keys(locations).forEach(function(ref){
+      if(!existingRefs[ref]) writeLocationEntry(ref, locations[ref]);
+    });
+  }
+  async function initSharedLocations(){
+    if(!db) return;
+    try{
+      var res = await db.from('locations').select('ref, locs');
+      if(res.error) throw res.error;
+      var existingRefs = {};
+      var changed = false;
+      (res.data || []).forEach(function(row){
+        existingRefs[row.ref] = true;
+        var arr = Array.isArray(row.locs) ? row.locs : [];
+        if(JSON.stringify(locations[row.ref] || []) !== JSON.stringify(arr)){
+          locations[row.ref] = arr;
+          changed = true;
+        }
+      });
+      if(changed) saveLocations();
+      if(!locationsMigrated){
+        locationsMigrated = true;
+        migrateLocalLocationsToDb(existingRefs);
+      }
+    }catch(e){
+      console.error(e);
+      return;
+    }
+
+    db.channel('locations-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'locations' }, function(payload){
+        var row = payload.eventType === 'DELETE' ? payload.old : payload.new;
+        if(!row || !row.ref) return;
+        if(payload.eventType === 'DELETE'){
+          delete locations[row.ref];
+        } else {
+          locations[row.ref] = Array.isArray(row.locs) ? row.locs : [];
+        }
+        saveLocations();
+        renderGroups();
+        if(document.getElementById('locationsModal').classList.contains('show')) renderLocationsList();
+      })
+      .subscribe();
+  }
+  function writeLocationEntry(ref, locsArr){
+    if(!db || !ref) return;
+    db.from('locations').upsert({ ref: String(ref), locs: locsArr, updated_at: new Date().toISOString() })
+      .then(function(res){ if(res.error) console.error(res.error); });
+  }
+  function deleteLocationEntry(ref){
+    if(!db || !ref) return;
+    db.from('locations').delete().eq('ref', String(ref))
       .then(function(res){ if(res.error) console.error(res.error); });
   }
 
@@ -1126,6 +1239,9 @@
         html += '<div class="chk'+(checked?' on':'')+'" data-role="chk">'+(checked?'✓':'')+'</div>';
         html += '<div class="ref"><div class="r1">'+refBreakHtml(it.ref)+'</div>';
         html += '<button class="price-tag'+(it.price!=null?' set':'')+'" data-role="price">'+escapeHtml(priceLabel)+'</button>';
+        var itLocs = locations[it.ref] || [];
+        var locLabel = itLocs.length ? itLocs.join(' · ') : '+ lieu';
+        html += '<button class="price-tag'+(itLocs.length?' set':'')+'" data-role="location">'+escapeHtml(locLabel)+'</button>';
         var itCodes = itemCodes(it);
         var codesHtml = itCodes.length ? itCodes.map(function(c){ return escapeHtml(c); }).join('<br>') : 'saisie manuelle';
         html += '<div class="r2">'+codesHtml+(it.by?' · '+escapeHtml(it.by):'')+'</div></div>';
@@ -1902,6 +2018,15 @@
       });
       return;
     }
+    if(role === 'location'){
+      askInput('Emplacement(s) pour "' + item.ref + '" (ex. a1b, c2a)', (locations[item.ref] || []).join(', '), 'text').then(function(val){
+        if(val === null) return;
+        setLocationForRef(item.ref, val);
+        renderAll();
+        if(document.getElementById('locationsModal').classList.contains('show')) renderLocationsList();
+      });
+      return;
+    }
     if(role === 'editRef'){
       askInput('Renommer la référence', item.ref, 'text', true).then(function(val){
         val = normalizeRef(val);
@@ -2421,6 +2546,114 @@
     document.getElementById('catalogFilter').value = '';
     renderCatalogList();
     document.getElementById('catalogModal').classList.add('show');
+  });
+
+  /* ================= Emplacements (chercher / gérer où est rangée une référence) ================= */
+  var locationsFilterText = '';
+  // Tous les codes-barres connus pour une référence (catalogue + articles de
+  // la feuille en cours), pour qu'une recherche par code-barres trouve aussi
+  // son emplacement.
+  function codesForRef(ref){
+    var codes = [];
+    Object.keys(catalog).forEach(function(c){ if(catalog[c] === ref) codes.push(c); });
+    state.suppliers.forEach(function(s){
+      s.items.forEach(function(it){ if(it.ref === ref) codes = codes.concat(itemCodes(it)); });
+    });
+    return codes;
+  }
+  // Le répertoire d'emplacements est volontairement indépendant de la
+  // feuille en cours : une référence déjà connue (catalogue ou inventaire)
+  // doit apparaître dans la recherche même sans emplacement enregistré, et
+  // même après un "Vider".
+  function allKnownRefs(){
+    var set = {};
+    Object.keys(locations).forEach(function(r){ set[r] = true; });
+    Object.keys(catalog).forEach(function(c){ if(catalog[c]) set[catalog[c]] = true; });
+    state.suppliers.forEach(function(s){ s.items.forEach(function(it){ set[it.ref] = true; }); });
+    return Object.keys(set).filter(Boolean);
+  }
+  function renderLocationsList(){
+    var wrap = document.getElementById('locationsList');
+    var q = locationsFilterText.trim().toLowerCase();
+    var refs = allKnownRefs();
+    if(q){
+      refs = refs.filter(function(ref){
+        if(ref.toLowerCase().indexOf(q) !== -1) return true;
+        return codesForRef(ref).some(function(c){ return c.toLowerCase().indexOf(q) !== -1; });
+      });
+    }
+    refs.sort(naturalCompare);
+    if(refs.length === 0){
+      wrap.innerHTML = '<div class="empty-state"><p>' + (q
+        ? 'Aucune référence ne correspond à "' + escapeHtml(locationsFilterText) + '".'
+        : 'Aucune référence connue pour l\'instant — scanne ou ajoute une référence pour commencer.') + '</p></div>';
+      return;
+    }
+    var html = '';
+    refs.forEach(function(ref){
+      var locs = locations[ref] || [];
+      html += '<div class="catalog-row" data-ref="' + escapeHtml(ref) + '">';
+      html += '<div class="ref-wrap"><div class="ref">' + refBreakHtml(ref) + '</div><div class="code">' + (locs.length ? escapeHtml(locs.join(' · ')) : 'aucun emplacement') + '</div></div>';
+      html += '<button class="row-icon-btn" data-role="editLocation" title="Modifier">✎</button>';
+      if(locs.length) html += '<button class="row-icon-btn" data-role="deleteLocation" title="Supprimer">✕</button>';
+      html += '</div>';
+    });
+    wrap.innerHTML = html;
+  }
+  document.getElementById('locationsFilter').addEventListener('input', function(){
+    locationsFilterText = this.value;
+    renderLocationsList();
+  });
+  document.getElementById('locationsList').addEventListener('click', function(e){
+    var row = e.target.closest('.catalog-row'); if(!row) return;
+    var ref = row.getAttribute('data-ref');
+    var role = e.target.closest('[data-role]');
+    role = role ? role.getAttribute('data-role') : null;
+    if(role === 'editLocation'){
+      askInput('Emplacement(s) pour "' + ref + '" (ex. a1b, c2a)', (locations[ref] || []).join(', '), 'text').then(function(val){
+        if(val === null) return;
+        setLocationForRef(ref, val);
+        renderLocationsList();
+        renderGroups();
+        toast('Emplacement enregistré');
+      });
+      return;
+    }
+    if(role === 'deleteLocation'){
+      openConfirm('Supprimer cet emplacement ?', 'La référence "' + ref + '" n\'aura plus d\'emplacement enregistré.', function(){
+        setLocationForRef(ref, '');
+        renderLocationsList();
+        renderGroups();
+        toast('Supprimé');
+      });
+      return;
+    }
+  });
+  document.getElementById('btnAddLocationEntry').addEventListener('click', function(){
+    askInput('Référence', '', 'text', true).then(function(ref){
+      ref = normalizeRef(ref);
+      if(!ref) return;
+      askInput('Emplacement(s) pour "' + ref + '" (ex. a1b, c2a)', (locations[ref] || []).join(', '), 'text').then(function(val){
+        if(val === null) return;
+        setLocationForRef(ref, val);
+        renderLocationsList();
+        renderGroups();
+        toast('Emplacement enregistré');
+      });
+    });
+  });
+  document.getElementById('btnCloseLocations').addEventListener('click', function(){
+    document.getElementById('locationsModal').classList.remove('show');
+  });
+  document.getElementById('btnCloseLocationsX').addEventListener('click', function(){
+    document.getElementById('locationsModal').classList.remove('show');
+  });
+  document.getElementById('locationsBtn').addEventListener('click', function(){
+    locationsFilterText = '';
+    document.getElementById('locationsFilter').value = '';
+    renderLocationsList();
+    document.getElementById('locationsModal').classList.add('show');
+    setTimeout(function(){ document.getElementById('locationsFilter').focus(); }, 200);
   });
 
   /* ================= Historique ================= */
