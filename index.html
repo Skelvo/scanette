@@ -244,7 +244,22 @@
   .catalog-row{ display:flex; align-items:center; gap:8px; padding:10px 2px; border-bottom:1px solid var(--line); }
   .catalog-row .ref-wrap{ flex:1; min-width:0; }
   .catalog-row .ref-wrap .ref{ font-family:var(--font-mono); font-weight:700; font-size:14px; line-height:1.3; white-space:normal; overflow-wrap:break-word; }
-  .catalog-row .ref-wrap .code{ font-size:11px; color:var(--text-faint); margin-top:1px; }
+  .loc-badges{ display:flex; gap:6px; flex-wrap:wrap; margin-top:5px; }
+  .loc-badge{
+    font-family:var(--font-mono); font-weight:800; font-size:14px; letter-spacing:.3px;
+    background:var(--accent); color:var(--accent-ink); border:none; border-radius:20px;
+    padding:5px 12px; line-height:1.2;
+  }
+  .loc-badge:active{ opacity:.8; }
+  .loc-none{ font-size:11px; color:var(--text-faint); }
+
+  .shelf-item-row{ font-family:var(--font-mono); font-weight:700; font-size:15px; padding:11px 8px; border-bottom:1px solid var(--line); border-radius:6px; }
+  /* Couleur de surligneur fixe (pas liée aux tokens de thème) : comme un
+     vrai stabilo, elle doit rester la même en clair et en sombre. */
+  .shelf-item-row.highlight{
+    background:#ffe066; color:#1a1000; font-size:20px; font-weight:800;
+    border:2px solid var(--accent); border-radius:8px; padding:14px 12px; margin:4px 0;
+  }
 
   .history-row{ border-bottom:1px solid var(--line); padding:10px 2px; }
   .history-row-head{ display:flex; align-items:center; justify-content:space-between; cursor:pointer; }
@@ -521,17 +536,29 @@
     <button class="btn-secondary" id="btnBackToStock" style="margin-top:0; margin-bottom:12px; display:flex; align-items:center; justify-content:center; gap:6px;">
       <svg class="icon" style="width:1em;height:1em;"><use href="#i-backspace"/></svg> Retour à l'inventaire
     </button>
-    <div class="panel">
-      <h2 style="margin:0 0 4px; font-size:16px;">Où est cette référence ?</h2>
-      <p class="sub" style="margin:0 0 14px;">Cherche une référence ou un code-barres pour savoir où elle est rangée en rayon (ex. a1b), même hors de la feuille en cours.</p>
-      <div class="search-field">
-        <svg class="icon search-field-icon"><use href="#i-search"/></svg>
-        <input class="field" id="locationsPageFilter" placeholder="Référence ou code-barres...">
+
+    <div id="locationsSearchView">
+      <div class="panel">
+        <h2 style="margin:0 0 4px; font-size:16px;">Où est cette référence ?</h2>
+        <p class="sub" style="margin:0 0 14px;">Cherche une référence ou un code-barres pour savoir où elle est rangée en rayon (ex. a1b), même hors de la feuille en cours.</p>
+        <div class="search-field">
+          <svg class="icon search-field-icon"><use href="#i-search"/></svg>
+          <input class="field" id="locationsPageFilter" placeholder="Référence ou code-barres...">
+        </div>
+      </div>
+      <div id="locationsPageList"></div>
+      <div class="panel">
+        <button class="btn-secondary" id="btnAddLocationEntryPage" style="margin-top:0;"><svg class="icon"><use href="#i-plus"/></svg> Ajouter une référence</button>
       </div>
     </div>
-    <div id="locationsPageList"></div>
-    <div class="panel">
-      <button class="btn-secondary" id="btnAddLocationEntryPage" style="margin-top:0;"><svg class="icon"><use href="#i-plus"/></svg> Ajouter une référence</button>
+
+    <div id="shelfDetailView" style="display:none;">
+      <button class="btn-secondary" id="btnBackToLocationsSearch" style="margin-bottom:12px;">← Retour à la recherche</button>
+      <div class="panel">
+        <h2 id="shelfDetailTitle" style="margin:0 0 4px; font-size:16px;">Rayon</h2>
+        <p class="sub" id="shelfDetailSub" style="margin:0;"></p>
+      </div>
+      <div id="shelfDetailList"></div>
     </div>
   </div>
   </main>
@@ -2566,6 +2593,8 @@
     $stockView.style.display = 'none';
     $locationsView.style.display = 'block';
     document.querySelector('.toolbar').style.display = 'none';
+    document.getElementById('shelfDetailView').style.display = 'none';
+    document.getElementById('locationsSearchView').style.display = 'block';
     locationsFilterText = '';
     document.getElementById('locationsPageFilter').value = '';
     renderLocationsPage();
@@ -2634,7 +2663,11 @@
     shown.forEach(function(ref){
       var locs = locations[ref] || [];
       html += '<div class="catalog-row" data-ref="' + escapeHtml(ref) + '">';
-      html += '<div class="ref-wrap"><div class="ref">' + refBreakHtml(ref) + '</div><div class="code">' + (locs.length ? escapeHtml(locs.join(' · ')) : 'aucun emplacement') + '</div></div>';
+      html += '<div class="ref-wrap"><div class="ref">' + refBreakHtml(ref) + '</div><div class="loc-badges">';
+      html += locs.length
+        ? locs.map(function(l){ return '<button class="loc-badge" data-role="viewShelf" data-shelf="' + escapeHtml(l) + '">' + escapeHtml(l) + '</button>'; }).join('')
+        : '<span class="loc-none">aucun emplacement</span>';
+      html += '</div></div>';
       html += '<button class="row-icon-btn" data-role="editLocation" title="Modifier">✎</button>';
       if(locs.length) html += '<button class="row-icon-btn" data-role="deleteLocation" title="Supprimer">✕</button>';
       html += '</div>';
@@ -2647,11 +2680,45 @@
     locationsFilterText = this.value;
     renderLocationsPage();
   });
+  // Détail d'un rayon : toutes les références qui y sont rangées, avec celle
+  // qu'on vient de chercher mise en évidence (comme un surligneur) pour la
+  // repérer d'un coup d'œil une fois devant le vrai rayon.
+  function showShelfDetail(shelfCode, originRef){
+    var refs = Object.keys(locations).filter(function(r){ return (locations[r] || []).indexOf(shelfCode) !== -1; });
+    refs.sort(naturalCompare);
+    document.getElementById('shelfDetailTitle').textContent = 'Rayon ' + shelfCode;
+    document.getElementById('shelfDetailSub').textContent = refs.length + ' référence(s) à cet emplacement.';
+    var html = '<div class="panel">';
+    refs.forEach(function(ref){
+      var isOrigin = ref === originRef;
+      html += '<div class="shelf-item-row' + (isOrigin ? ' highlight' : '') + '"' + (isOrigin ? ' id="shelfDetailOrigin"' : '') + '>' + refBreakHtml(ref) + '</div>';
+    });
+    html += '</div>';
+    document.getElementById('shelfDetailList').innerHTML = html;
+    document.getElementById('locationsSearchView').style.display = 'none';
+    document.getElementById('shelfDetailView').style.display = 'block';
+    if(originRef){
+      setTimeout(function(){
+        var el = document.getElementById('shelfDetailOrigin');
+        if(el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 50);
+    }
+  }
+  document.getElementById('btnBackToLocationsSearch').addEventListener('click', function(){
+    document.getElementById('shelfDetailView').style.display = 'none';
+    document.getElementById('locationsSearchView').style.display = 'block';
+  });
   document.getElementById('locationsPageList').addEventListener('click', function(e){
-    var row = e.target.closest('.catalog-row'); if(!row) return;
-    var ref = row.getAttribute('data-ref');
     var role = e.target.closest('[data-role]');
     role = role ? role.getAttribute('data-role') : null;
+    if(role === 'viewShelf'){
+      var shelfBtn = e.target.closest('[data-shelf]');
+      var originRow = e.target.closest('.catalog-row');
+      showShelfDetail(shelfBtn.getAttribute('data-shelf'), originRow ? originRow.getAttribute('data-ref') : null);
+      return;
+    }
+    var row = e.target.closest('.catalog-row'); if(!row) return;
+    var ref = row.getAttribute('data-ref');
     if(role === 'editLocation'){
       askInput('Emplacement(s) pour "' + ref + '" (ex. a1b, c2a)', (locations[ref] || []).join(', '), 'text').then(function(val){
         if(val === null) return;
