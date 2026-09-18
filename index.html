@@ -2602,10 +2602,19 @@
     state.suppliers.forEach(function(s){ s.items.forEach(function(it){ set[it.ref] = true; }); });
     return Object.keys(set).filter(Boolean);
   }
+  // Le magasin peut avoir plusieurs milliers de références connues : lister
+  // tout d'un coup sans filtre ferait ramer la page (des milliers de lignes
+  // DOM d'un coup) pour un intérêt nul — on invite à chercher à la place, et
+  // on plafonne aussi le nombre de résultats affichés même filtrés.
+  var LOCATIONS_PAGE_MAX_ROWS = 200;
   function renderLocationsPage(){
     var wrap = document.getElementById('locationsPageList');
     var q = locationsFilterText.trim().toLowerCase();
     var refs = allKnownRefs();
+    if(!q && refs.length > LOCATIONS_PAGE_MAX_ROWS){
+      wrap.innerHTML = '<div class="panel empty-state"><p>' + refs.length + ' références connues — tape une référence ou un code-barres pour chercher.</p></div>';
+      return;
+    }
     if(q){
       refs = refs.filter(function(ref){
         if(ref.toLowerCase().indexOf(q) !== -1) return true;
@@ -2619,8 +2628,10 @@
         : 'Aucune référence connue pour l\'instant — scanne ou ajoute une référence pour commencer.') + '</p></div>';
       return;
     }
+    var truncated = refs.length > LOCATIONS_PAGE_MAX_ROWS;
+    var shown = truncated ? refs.slice(0, LOCATIONS_PAGE_MAX_ROWS) : refs;
     var html = '<div class="panel">';
-    refs.forEach(function(ref){
+    shown.forEach(function(ref){
       var locs = locations[ref] || [];
       html += '<div class="catalog-row" data-ref="' + escapeHtml(ref) + '">';
       html += '<div class="ref-wrap"><div class="ref">' + refBreakHtml(ref) + '</div><div class="code">' + (locs.length ? escapeHtml(locs.join(' · ')) : 'aucun emplacement') + '</div></div>';
@@ -2629,6 +2640,7 @@
       html += '</div>';
     });
     html += '</div>';
+    if(truncated) html += '<div class="panel empty-state"><p>+ ' + (refs.length - LOCATIONS_PAGE_MAX_ROWS) + ' autre(s) résultat — affine ta recherche pour les voir.</p></div>';
     wrap.innerHTML = html;
   }
   document.getElementById('locationsPageFilter').addEventListener('input', function(){
