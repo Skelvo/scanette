@@ -451,6 +451,7 @@
   </header>
 
   <main>
+  <div id="stockView">
     <div class="panel">
       <div class="scan-row">
         <button class="btn-scan" id="btnScan"><svg class="icon icon-fill"><use href="#i-play"/></svg>&nbsp;DÉMARRER LE SCAN</button>
@@ -514,6 +515,25 @@
         <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v51 — 18/09</b></p>
       </div>
     </div>
+  </div>
+
+  <div id="locationsView" style="display:none;">
+    <button class="btn-secondary" id="btnBackToStock" style="margin-top:0; margin-bottom:12px; display:flex; align-items:center; justify-content:center; gap:6px;">
+      <svg class="icon" style="width:1em;height:1em;"><use href="#i-backspace"/></svg> Retour à l'inventaire
+    </button>
+    <div class="panel">
+      <h2 style="margin:0 0 4px; font-size:16px;">Où est cette référence ?</h2>
+      <p class="sub" style="margin:0 0 14px;">Cherche une référence ou un code-barres pour savoir où elle est rangée en rayon (ex. a1b), même hors de la feuille en cours.</p>
+      <div class="search-field">
+        <svg class="icon search-field-icon"><use href="#i-search"/></svg>
+        <input class="field" id="locationsPageFilter" placeholder="Référence ou code-barres...">
+      </div>
+    </div>
+    <div id="locationsPageList"></div>
+    <div class="panel">
+      <button class="btn-secondary" id="btnAddLocationEntryPage" style="margin-top:0;"><svg class="icon"><use href="#i-plus"/></svg> Ajouter une référence</button>
+    </div>
+  </div>
   </main>
 
   <div class="last-action-bar" id="lastActionBar">
@@ -625,21 +645,6 @@
     <div id="catalogList"></div>
     <button class="btn-secondary" id="btnAddCatalogEntry"><svg class="icon"><use href="#i-plus"/></svg> Ajouter une correspondance</button>
     <button class="btn-secondary" id="btnCloseCatalog">Fermer</button>
-  </div>
-</div>
-
-<!-- Emplacements modal -->
-<div class="modal-backdrop" id="locationsModal">
-  <div class="sheet" style="max-height:90vh;">
-    <div class="sheet-head"><h2>Emplacements</h2><button class="row-icon-btn" id="btnCloseLocationsX" title="Fermer">✕</button></div>
-    <p class="sub">Cherche une référence ou un code-barres pour savoir où elle est rangée en rayon (ex. a1b).</p>
-    <div class="search-field">
-      <svg class="icon search-field-icon"><use href="#i-search"/></svg>
-      <input class="field" id="locationsFilter" placeholder="Référence ou code-barres...">
-    </div>
-    <div id="locationsList"></div>
-    <button class="btn-secondary" id="btnAddLocationEntry"><svg class="icon"><use href="#i-plus"/></svg> Ajouter une référence</button>
-    <button class="btn-secondary" id="btnCloseLocations">Fermer</button>
   </div>
 </div>
 
@@ -1003,7 +1008,7 @@
         }
         saveLocations();
         renderGroups();
-        if(document.getElementById('locationsModal').classList.contains('show')) renderLocationsList();
+        if(isLocationsViewOpen()) renderLocationsPage();
       })
       .subscribe();
   }
@@ -2023,7 +2028,7 @@
         if(val === null) return;
         setLocationForRef(item.ref, val);
         renderAll();
-        if(document.getElementById('locationsModal').classList.contains('show')) renderLocationsList();
+        if(isLocationsViewOpen()) renderLocationsPage();
       });
       return;
     }
@@ -2548,8 +2553,33 @@
     document.getElementById('catalogModal').classList.add('show');
   });
 
-  /* ================= Emplacements (chercher / gérer où est rangée une référence) ================= */
+  /* ================= Emplacements — vraie page dédiée (pas une modale) ================= */
+  // Une page à part entière plutôt qu'une modale par-dessus l'inventaire :
+  // on cherche "où est cette référence" comme une tâche en soi, pas comme un
+  // réglage ponctuel qu'on referme aussitôt — ça mérite tout l'écran, avec
+  // un vrai retour en arrière plutôt qu'une fermeture de panneau.
+  var $stockView = document.getElementById('stockView');
+  var $locationsView = document.getElementById('locationsView');
   var locationsFilterText = '';
+  function isLocationsViewOpen(){ return $locationsView.style.display !== 'none'; }
+  function showLocationsView(){
+    $stockView.style.display = 'none';
+    $locationsView.style.display = 'block';
+    document.querySelector('.toolbar').style.display = 'none';
+    locationsFilterText = '';
+    document.getElementById('locationsPageFilter').value = '';
+    renderLocationsPage();
+    window.scrollTo(0, 0);
+    setTimeout(function(){ document.getElementById('locationsPageFilter').focus(); }, 150);
+  }
+  function showStockView(){
+    $locationsView.style.display = 'none';
+    $stockView.style.display = 'block';
+    document.querySelector('.toolbar').style.display = '';
+  }
+  document.getElementById('locationsBtn').addEventListener('click', showLocationsView);
+  document.getElementById('btnBackToStock').addEventListener('click', showStockView);
+
   // Tous les codes-barres connus pour une référence (catalogue + articles de
   // la feuille en cours), pour qu'une recherche par code-barres trouve aussi
   // son emplacement.
@@ -2572,8 +2602,8 @@
     state.suppliers.forEach(function(s){ s.items.forEach(function(it){ set[it.ref] = true; }); });
     return Object.keys(set).filter(Boolean);
   }
-  function renderLocationsList(){
-    var wrap = document.getElementById('locationsList');
+  function renderLocationsPage(){
+    var wrap = document.getElementById('locationsPageList');
     var q = locationsFilterText.trim().toLowerCase();
     var refs = allKnownRefs();
     if(q){
@@ -2584,12 +2614,12 @@
     }
     refs.sort(naturalCompare);
     if(refs.length === 0){
-      wrap.innerHTML = '<div class="empty-state"><p>' + (q
+      wrap.innerHTML = '<div class="panel empty-state"><p>' + (q
         ? 'Aucune référence ne correspond à "' + escapeHtml(locationsFilterText) + '".'
         : 'Aucune référence connue pour l\'instant — scanne ou ajoute une référence pour commencer.') + '</p></div>';
       return;
     }
-    var html = '';
+    var html = '<div class="panel">';
     refs.forEach(function(ref){
       var locs = locations[ref] || [];
       html += '<div class="catalog-row" data-ref="' + escapeHtml(ref) + '">';
@@ -2598,13 +2628,14 @@
       if(locs.length) html += '<button class="row-icon-btn" data-role="deleteLocation" title="Supprimer">✕</button>';
       html += '</div>';
     });
+    html += '</div>';
     wrap.innerHTML = html;
   }
-  document.getElementById('locationsFilter').addEventListener('input', function(){
+  document.getElementById('locationsPageFilter').addEventListener('input', function(){
     locationsFilterText = this.value;
-    renderLocationsList();
+    renderLocationsPage();
   });
-  document.getElementById('locationsList').addEventListener('click', function(e){
+  document.getElementById('locationsPageList').addEventListener('click', function(e){
     var row = e.target.closest('.catalog-row'); if(!row) return;
     var ref = row.getAttribute('data-ref');
     var role = e.target.closest('[data-role]');
@@ -2613,7 +2644,7 @@
       askInput('Emplacement(s) pour "' + ref + '" (ex. a1b, c2a)', (locations[ref] || []).join(', '), 'text').then(function(val){
         if(val === null) return;
         setLocationForRef(ref, val);
-        renderLocationsList();
+        renderLocationsPage();
         renderGroups();
         toast('Emplacement enregistré');
       });
@@ -2622,38 +2653,25 @@
     if(role === 'deleteLocation'){
       openConfirm('Supprimer cet emplacement ?', 'La référence "' + ref + '" n\'aura plus d\'emplacement enregistré.', function(){
         setLocationForRef(ref, '');
-        renderLocationsList();
+        renderLocationsPage();
         renderGroups();
         toast('Supprimé');
       });
       return;
     }
   });
-  document.getElementById('btnAddLocationEntry').addEventListener('click', function(){
+  document.getElementById('btnAddLocationEntryPage').addEventListener('click', function(){
     askInput('Référence', '', 'text', true).then(function(ref){
       ref = normalizeRef(ref);
       if(!ref) return;
       askInput('Emplacement(s) pour "' + ref + '" (ex. a1b, c2a)', (locations[ref] || []).join(', '), 'text').then(function(val){
         if(val === null) return;
         setLocationForRef(ref, val);
-        renderLocationsList();
+        renderLocationsPage();
         renderGroups();
         toast('Emplacement enregistré');
       });
     });
-  });
-  document.getElementById('btnCloseLocations').addEventListener('click', function(){
-    document.getElementById('locationsModal').classList.remove('show');
-  });
-  document.getElementById('btnCloseLocationsX').addEventListener('click', function(){
-    document.getElementById('locationsModal').classList.remove('show');
-  });
-  document.getElementById('locationsBtn').addEventListener('click', function(){
-    locationsFilterText = '';
-    document.getElementById('locationsFilter').value = '';
-    renderLocationsList();
-    document.getElementById('locationsModal').classList.add('show');
-    setTimeout(function(){ document.getElementById('locationsFilter').focus(); }, 200);
   });
 
   /* ================= Historique ================= */
