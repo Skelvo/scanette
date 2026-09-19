@@ -574,7 +574,7 @@
         <p><b>Stock</b> : un total permanent par référence, partagé avec toute l'équipe, séparé de la feuille de réception (qui reste juste un compteur qu'on vide). La réception l'alimente automatiquement. <b>Préparation de commande</b> (bouton sous le scan) : scanner une pièce prélevée la retire directement de ce stock, même sans fournisseur ni feuille. Si ça tombe sous 0, c'est autorisé mais enregistré dans les <b>Anomalies</b> (bouton dans la page Préparation) pour vérification et correction plus tard.</p>
         <p><b>Historique</b> : chaque "Vider" garde une sauvegarde datée, consultable, exportable en CSV, ou restaurable sur la feuille en cours.</p>
         <p><b>Prénom</b> : sert à savoir qui a compté quoi (affiché sur les lignes et dans les exports), et à voir qui d'autre a l'app ouverte en même temps. <button id="btnChangeUserName" style="display:inline; background:none; border:none; padding:0; margin:0; font-size:12.5px; font-family:inherit; color:var(--accent); font-weight:700;">Ton prénom : <span id="userNameDisplay">(non défini)</span> — toucher pour changer</button></p>
-        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v57 — 19/09</b></p>
+        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v58 — 19/09</b></p>
       </div>
     </div>
   </div>
@@ -1217,11 +1217,20 @@
   async function initSharedLocations(){
     if(!db) return;
     try{
-      var res = await db.from('locations').select('ref, locs');
-      if(res.error) throw res.error;
+      var locationRows = [];
+      var LOCATIONS_LOAD_PAGE = 1000;
+      var locFrom = 0;
+      while(true){
+        var locPage = await db.from('locations').select('ref, locs').range(locFrom, locFrom + LOCATIONS_LOAD_PAGE - 1);
+        if(locPage.error) throw locPage.error;
+        var locRows = locPage.data || [];
+        locationRows = locationRows.concat(locRows);
+        if(locRows.length < LOCATIONS_LOAD_PAGE) break;
+        locFrom += LOCATIONS_LOAD_PAGE;
+      }
       var existingRefs = {};
       var changed = false;
-      (res.data || []).forEach(function(row){
+      locationRows.forEach(function(row){
         existingRefs[row.ref] = true;
         var arr = Array.isArray(row.locs) ? row.locs : [];
         if(JSON.stringify(locations[row.ref] || []) !== JSON.stringify(arr)){
@@ -1276,10 +1285,19 @@
   async function initSharedStock(){
     if(!db) return;
     try{
-      var res = await db.from('stock').select('ref, qty');
-      if(res.error) throw res.error;
+      var stockRows = [];
+      var STOCK_LOAD_PAGE = 1000;
+      var stockFrom = 0;
+      while(true){
+        var stockPage = await db.from('stock').select('ref, qty').range(stockFrom, stockFrom + STOCK_LOAD_PAGE - 1);
+        if(stockPage.error) throw stockPage.error;
+        var stockPageRows = stockPage.data || [];
+        stockRows = stockRows.concat(stockPageRows);
+        if(stockPageRows.length < STOCK_LOAD_PAGE) break;
+        stockFrom += STOCK_LOAD_PAGE;
+      }
       var changed = false;
-      (res.data || []).forEach(function(row){
+      stockRows.forEach(function(row){
         if(stock[row.ref] !== row.qty){ stock[row.ref] = row.qty; changed = true; }
       });
       if(changed) saveStock();
@@ -2886,14 +2904,23 @@
 
   /* ================= Catalogue (voir/modifier toutes les correspondances) ================= */
   var catalogFilterText = '';
+  // Avec plusieurs milliers de correspondances, construire toutes les lignes
+  // DOM d'un coup sans filtre ferait ramer l'ouverture de la modale pour un
+  // intérêt nul — même logique que la page Emplacements.
+  var CATALOG_PAGE_MAX_ROWS = 200;
   function renderCatalogList(){
     var wrap = document.getElementById('catalogList');
     var q = catalogFilterText.trim().toLowerCase();
     var total = Object.keys(catalog).length;
+    var sub = document.getElementById('catalogSub');
+    if(!q && total > CATALOG_PAGE_MAX_ROWS){
+      sub.textContent = total + ' correspondance(s) au total, partagées avec toute l\'équipe.';
+      wrap.innerHTML = '<div class="empty-state"><p>' + total + ' correspondances connues — tape un code-barres ou une référence pour chercher.</p></div>';
+      return;
+    }
     var codes = Object.keys(catalog).filter(function(c){
       return !q || c.toLowerCase().indexOf(q) !== -1 || catalog[c].toLowerCase().indexOf(q) !== -1;
     }).sort(function(a, b){ return naturalCompare(catalog[a], catalog[b]); });
-    var sub = document.getElementById('catalogSub');
     sub.textContent = q
       ? codes.length + ' / ' + total + ' correspondance(s) — filtré'
       : total + ' correspondance(s) au total, partagées avec toute l\'équipe.';
@@ -2903,14 +2930,17 @@
         : 'Catalogue vide — scanne un code inconnu pour commencer à le remplir.') + '</p></div>';
       return;
     }
+    var truncated = codes.length > CATALOG_PAGE_MAX_ROWS;
+    var shown = truncated ? codes.slice(0, CATALOG_PAGE_MAX_ROWS) : codes;
     var html = '';
-    codes.forEach(function(code){
+    shown.forEach(function(code){
       html += '<div class="catalog-row" data-code="' + escapeHtml(code) + '">';
       html += '<div class="ref-wrap"><div class="ref">' + refBreakHtml(catalog[code]) + '</div><div class="code">' + escapeHtml(code) + '</div></div>';
       html += '<button class="row-icon-btn" data-role="editCatalog" title="Renommer">✎</button>';
       html += '<button class="row-icon-btn" data-role="deleteCatalog" title="Supprimer">✕</button>';
       html += '</div>';
     });
+    if(truncated) html += '<div class="empty-state"><p>+ ' + (codes.length - CATALOG_PAGE_MAX_ROWS) + ' autre(s) résultat — affine ta recherche pour les voir.</p></div>';
     wrap.innerHTML = html;
   }
   document.getElementById('catalogFilter').addEventListener('input', function(){
