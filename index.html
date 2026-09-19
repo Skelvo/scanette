@@ -574,7 +574,7 @@
         <p><b>Stock</b> : un total permanent par référence, partagé avec toute l'équipe, séparé de la feuille de réception (qui reste juste un compteur qu'on vide). La réception l'alimente automatiquement. <b>Préparation de commande</b> (bouton sous le scan) : scanner une pièce prélevée la retire directement de ce stock, même sans fournisseur ni feuille. Si ça tombe sous 0, c'est autorisé mais enregistré dans les <b>Anomalies</b> (bouton dans la page Préparation) pour vérification et correction plus tard.</p>
         <p><b>Historique</b> : chaque "Vider" garde une sauvegarde datée, consultable, exportable en CSV, ou restaurable sur la feuille en cours.</p>
         <p><b>Prénom</b> : sert à savoir qui a compté quoi (affiché sur les lignes et dans les exports), et à voir qui d'autre a l'app ouverte en même temps. <button id="btnChangeUserName" style="display:inline; background:none; border:none; padding:0; margin:0; font-size:12.5px; font-family:inherit; color:var(--accent); font-weight:700;">Ton prénom : <span id="userNameDisplay">(non défini)</span> — toucher pour changer</button></p>
-        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v59 — 19/09</b></p>
+        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v60 — 19/09</b></p>
       </div>
     </div>
   </div>
@@ -671,6 +671,7 @@
         <input class="field" id="ledgerFilter" placeholder="Référence...">
       </div>
     </div>
+    <div id="ledgerDashboard"></div>
     <div id="ledgerStockResult"></div>
     <div class="panel" style="margin-bottom:4px;">
       <b style="font-size:13px;">Mouvements</b>
@@ -1313,6 +1314,7 @@
         renderLowStockBadge();
         renderGroups();
         if(isPrepViewOpen()) renderPrepSession();
+        refreshStockDashboardIfOpen();
       })
       .subscribe();
   }
@@ -1328,6 +1330,7 @@
     saveStock();
     renderLowStockBadge();
     logStockMovement(ref, delta, stock[ref], type || 'reception');
+    refreshStockDashboardIfOpen();
     if(!db) return;
     db.rpc('increment_stock', { p_ref: String(ref), p_delta: delta })
       .then(function(res){ if(res.error) console.error(res.error); });
@@ -1350,6 +1353,7 @@
     logStockMovement(oldRef, -qty, 0, 'renommage');
     logStockMovement(newRef, qty, newAfter, 'renommage');
     toast('Stock déplacé : ' + oldRef + ' → ' + newRef + ' (total ' + newAfter + ')');
+    refreshStockDashboardIfOpen();
     if(!db) return;
     db.rpc('rename_stock_ref', { p_old: String(oldRef), p_new: String(newRef) })
       .then(function(res){ if(res.error) console.error(res.error); });
@@ -1423,6 +1427,7 @@
         saveAnomalies();
         renderAnomalyBadge();
         if(isPrepViewOpen() && document.getElementById('anomaliesView').style.display !== 'none') renderAnomaliesList();
+        refreshStockDashboardIfOpen();
       })
       .subscribe();
   }
@@ -1434,6 +1439,7 @@
     anomalies.unshift(entry);
     saveAnomalies();
     renderAnomalyBadge();
+    refreshStockDashboardIfOpen();
     if(!db) return;
     // On envoie notre id généré localement (plutôt que d'en laisser
     // générer un côté serveur) pour que l'écho temps réel de cet insert
@@ -1449,6 +1455,7 @@
     if(a) a.resolved = true;
     saveAnomalies();
     renderAnomalyBadge();
+    refreshStockDashboardIfOpen();
     if(!db || !a) return;
     // Les entrées créées hors ligne ont un id local (uid()) qui ne
     // correspond à aucune ligne côté serveur — pas de mise à jour à distance
@@ -3103,6 +3110,7 @@
     document.querySelector('.toolbar').style.display = 'none';
     ledgerFilterText = '';
     document.getElementById('ledgerFilter').value = '';
+    renderStockDashboard();
     renderLedgerSearch();
     renderLedgerMovements();
     window.scrollTo(0, 0);
@@ -3432,6 +3440,24 @@
     html += '</div>';
     return html;
   }
+  function renderStockDashboard(){
+    var wrap = document.getElementById('ledgerDashboard');
+    if(!wrap) return;
+    var refs = Object.keys(stock).filter(function(r){ return stock[r] !== 0; });
+    var totalPieces = refs.reduce(function(sum, r){ return sum + stock[r]; }, 0);
+    var lowCount = lowStockRefs().length;
+    var pendingCount = anomalies.filter(function(a){ return !a.resolved; }).length;
+    var html = '<div class="panel"><div class="stat-row">';
+    html += '<div><span class="n">' + totalPieces + '</span> <span class="lbl">pièce(s) en stock</span></div>';
+    html += '<div><span class="n">' + refs.length + '</span> <span class="lbl">référence(s) en stock</span></div>';
+    html += '<div><span class="n"' + (lowCount > 0 ? ' style="color:var(--danger);"' : '') + '>' + lowCount + '</span> <span class="lbl">en alerte basse</span></div>';
+    html += '<div><span class="n"' + (pendingCount > 0 ? ' style="color:var(--danger);"' : '') + '>' + pendingCount + '</span> <span class="lbl">anomalie(s) en attente</span></div>';
+    html += '</div></div>';
+    wrap.innerHTML = html;
+  }
+  function refreshStockDashboardIfOpen(){
+    if(isLedgerViewOpen()) renderStockDashboard();
+  }
   function renderLowStockSummary(wrap){
     var list = lowStockRefs();
     var html = '<div class="panel" style="display:flex; align-items:center; justify-content:space-between; gap:10px;">';
@@ -3612,6 +3638,8 @@
       lowStockThreshold = n;
       saveLowStockThreshold();
       renderLowStockBadge();
+      refreshStockDashboardIfOpen();
+      if(isLedgerViewOpen() && !ledgerFilterText.trim()) renderLowStockSummary(document.getElementById('ledgerStockResult'));
       toast('Seuil mis à jour');
     });
   });
