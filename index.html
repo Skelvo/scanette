@@ -574,7 +574,7 @@
         <p><b>Stock</b> : un total permanent par référence, partagé avec toute l'équipe, séparé de la feuille de réception (qui reste juste un compteur qu'on vide). La réception l'alimente automatiquement. <b>Préparation de commande</b> (bouton sous le scan) : scanner une pièce prélevée la retire directement de ce stock, même sans fournisseur ni feuille. Si ça tombe sous 0, c'est autorisé mais enregistré dans les <b>Anomalies</b> (bouton dans la page Préparation) pour vérification et correction plus tard.</p>
         <p><b>Historique</b> : chaque "Vider" garde une sauvegarde datée, consultable, exportable en CSV, ou restaurable sur la feuille en cours.</p>
         <p><b>Prénom</b> : sert à savoir qui a compté quoi (affiché sur les lignes et dans les exports), et à voir qui d'autre a l'app ouverte en même temps. <button id="btnChangeUserName" style="display:inline; background:none; border:none; padding:0; margin:0; font-size:12.5px; font-family:inherit; color:var(--accent); font-weight:700;">Ton prénom : <span id="userNameDisplay">(non défini)</span> — toucher pour changer</button></p>
-        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v56 — 19/09</b></p>
+        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v57 — 19/09</b></p>
       </div>
     </div>
   </div>
@@ -751,6 +751,7 @@
       <button id="menuLocations"><svg class="icon"><use href="#i-pin"/></svg> Emplacements</button>
       <button id="menuHistory"><svg class="icon"><use href="#i-clock"/></svg> Historique</button>
       <button id="menuStockCorrect"><svg class="icon"><use href="#i-refresh"/></svg> Corriger le stock</button>
+      <button id="menuStockCorrectPinChange"><svg class="icon"><use href="#i-refresh"/></svg> Changer le code de correction</button>
       <button id="menuStockThreshold"><svg class="icon"><use href="#i-alert"/></svg> Seuil d'alerte stock bas</button>
       <button id="menuStockExport"><svg class="icon"><use href="#i-file"/></svg> Exporter le stock (CSV)</button>
       <button id="menuTheme"><svg class="icon"><use href="#i-theme"/></svg> Thème</button>
@@ -1091,6 +1092,7 @@
   var SUPABASE_KEY = 'sb_publishable_xxdT_igdGriNkQeM28vhzQ_6q3AI7SU';
   var db = null;
   var catalogMigrated = false;
+  var sharedCorrectionPin = null; // code d'accès partagé pour les corrections de stock, synchronisé via app_settings
 
   function setSyncIndicator(on){
     var el = document.getElementById('syncDot');
@@ -1139,6 +1141,7 @@
       initSharedStock();
       initSharedAnomalies();
       initSharedStockMovements();
+      initSharedCorrectionPin();
     }catch(e){
       console.error(e);
       db = null;
@@ -3440,17 +3443,58 @@
     renderLedgerMovements();
   });
 
-  /* ================= Correction manuelle de stock (protégée par code) ================= */
+  /* ================= Correction manuelle de stock (protégée par code partagé) ================= */
+  // Le code est synchronisé via app_settings (comme le catalogue) : une fois
+  // créé sur un appareil, c'est le même code partout, pas un code par
+  // appareil que n'importe qui pourrait recréer de son côté.
+  async function initSharedCorrectionPin(){
+    if(!db) return;
+    try{
+      var res = await db.from('app_settings').select('value').eq('key', 'stock_correction_pin').maybeSingle();
+      if(res.error) throw res.error;
+      if(res.data && res.data.value){
+        sharedCorrectionPin = res.data.value;
+        try{ localStorage.setItem(CORRECTION_PIN_KEY, sharedCorrectionPin); }catch(e){}
+      } else {
+        // Rien en base : si cet appareil avait déjà un code local (créé
+        // avant la synchronisation du code), on le pousse comme code de
+        // départ pour toute l'équipe, plutôt que de forcer une recréation.
+        var local = null;
+        try{ local = localStorage.getItem(CORRECTION_PIN_KEY); }catch(e){}
+        if(local){
+          sharedCorrectionPin = local;
+          writeCorrectionPin(local);
+        }
+      }
+    }catch(e){ console.error(e); return; }
+    db.channel('correction-pin-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings', filter: 'key=eq.stock_correction_pin' }, function(payload){
+        var row = payload.new;
+        if(!row || !row.value) return;
+        sharedCorrectionPin = row.value;
+        try{ localStorage.setItem(CORRECTION_PIN_KEY, row.value); }catch(e){}
+      })
+      .subscribe();
+  }
+  function writeCorrectionPin(value){
+    if(!db) return;
+    db.from('app_settings').upsert({ key: 'stock_correction_pin', value: value, updated_at: new Date().toISOString() })
+      .then(function(res){ if(res.error) console.error(res.error); });
+  }
   function askCorrectionPin(){
-    var stored = null;
-    try{ stored = localStorage.getItem(CORRECTION_PIN_KEY); }catch(e){}
+    var stored = sharedCorrectionPin;
     if(!stored){
-      return askInput('Crée un code d\'accès pour les corrections de stock', '', 'numeric').then(function(code1){
+      try{ stored = localStorage.getItem(CORRECTION_PIN_KEY); }catch(e){}
+    }
+    if(!stored){
+      return askInput('Crée le code d\'accès partagé pour les corrections de stock', '', 'numeric').then(function(code1){
         if(!code1) return false;
         return askInput('Confirme le code', '', 'numeric').then(function(code2){
           if(!code2 || code1 !== code2){ toast('Les codes ne correspondent pas'); return false; }
+          sharedCorrectionPin = code1;
           try{ localStorage.setItem(CORRECTION_PIN_KEY, code1); }catch(e){}
-          toast('Code de correction créé');
+          writeCorrectionPin(code1);
+          toast(db ? 'Code de correction créé — partagé avec toute l\'équipe' : 'Code créé sur cet appareil (hors ligne) — sera partagé une fois reconnecté');
           return true;
         });
       });
@@ -3459,6 +3503,21 @@
       if(code !== null && code === stored) return true;
       if(code !== null) toast('Code incorrect');
       return false;
+    });
+  }
+  function changeCorrectionPin(){
+    askCorrectionPin().then(function(ok){
+      if(!ok) return;
+      askInput('Nouveau code à 4 chiffres', '', 'numeric').then(function(code1){
+        if(!code1) return;
+        askInput('Confirme le nouveau code', '', 'numeric').then(function(code2){
+          if(!code2 || code1 !== code2){ toast('Les codes ne correspondent pas'); return; }
+          sharedCorrectionPin = code1;
+          try{ localStorage.setItem(CORRECTION_PIN_KEY, code1); }catch(e){}
+          writeCorrectionPin(code1);
+          toast('Code de correction changé pour toute l\'équipe');
+        });
+      });
     });
   }
   function startStockCorrection(prefillRef){
@@ -3485,6 +3544,10 @@
   document.getElementById('menuStockCorrect').addEventListener('click', function(){
     closeMoreMenu();
     startStockCorrection(null);
+  });
+  document.getElementById('menuStockCorrectPinChange').addEventListener('click', function(){
+    closeMoreMenu();
+    changeCorrectionPin();
   });
   document.getElementById('menuStockThreshold').addEventListener('click', function(){
     closeMoreMenu();
