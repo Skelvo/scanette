@@ -154,6 +154,16 @@
 
   .panel{ background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:14px; margin-bottom:12px; }
 
+  /* ---------- Onglets Réception / Préparation ---------- */
+  .mode-tabs{ display:flex; gap:6px; background:var(--surface-2); border:1px solid var(--line); border-radius:var(--radius); padding:4px; margin-bottom:12px; }
+  .mode-tab{
+    flex:1; display:flex; align-items:center; justify-content:center; gap:6px;
+    background:transparent; border:none; color:var(--text-dim); border-radius:var(--radius-sm);
+    padding:10px 8px; font-family:var(--font-display); font-weight:700; font-size:13px;
+  }
+  .mode-tab.active{ background:var(--surface); color:var(--text); box-shadow:0 1px 3px rgba(0,0,0,.2); }
+  .mode-tab#modeTabPrep.active{ color:var(--danger); }
+
   .scan-row{ display:flex; gap:10px; align-items:stretch; }
   .btn-scan{
     flex:1; background:var(--accent); color:var(--accent-ink); border:none; border-radius:var(--radius);
@@ -432,6 +442,7 @@
     <symbol id="i-inbox" viewBox="0 0 24 24"><path d="M4 12h4l2 3h4l2-3h4"/><path d="M6 5h12l2 7v7H4v-7l2-7Z"/></symbol>
     <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s7-6.7 7-11.5A7 7 0 0 0 5 9.5C5 14.3 12 21 12 21Z"/><circle cx="12" cy="9.5" r="2.4"/></symbol>
     <symbol id="i-outbox" viewBox="0 0 24 24"><path d="M4 12h4l2 3h4l2-3h4"/><path d="M6 5h12l2 7v7H4v-7l2-7Z"/><path d="M12 3v7M9 7l3-3 3 3"/></symbol>
+    <symbol id="i-dots" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.6" fill="currentColor" stroke="none"/></symbol>
     <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3 2 20h20L12 3Z"/><path d="M12 10v4"/><circle cx="12" cy="17" r="0.6" fill="currentColor" stroke="none"/></symbol>
   </defs>
 </svg>
@@ -464,11 +475,7 @@
       <div class="brand"><span class="mark"><svg class="icon"><use href="#i-box"/></svg></span> Scanette</div>
       <div class="head-actions">
         <div class="sync-dot off" id="syncDot" title="Catalogue partagé : hors ligne"><svg class="icon"><use href="#i-cloud"/></svg></div>
-        <button class="icon-btn" id="catalogBtn" title="Catalogue"><svg class="icon"><use href="#i-book"/></svg></button>
-        <button class="icon-btn" id="locationsBtn" title="Où est cette référence ?"><svg class="icon"><use href="#i-pin"/></svg></button>
-        <button class="icon-btn" id="historyBtn" title="Historique"><svg class="icon"><use href="#i-clock"/></svg></button>
-        <button class="icon-btn" id="themeBtn" title="Thème"><svg class="icon"><use href="#i-theme"/></svg></button>
-        <button class="icon-btn" id="lockBtn" title="Verrouiller"><svg class="icon"><use href="#i-power"/></svg></button>
+        <button class="icon-btn" id="moreMenuBtn" title="Menu"><svg class="icon"><use href="#i-dots"/></svg></button>
       </div>
     </div>
     <div class="stat-row">
@@ -480,6 +487,10 @@
   </header>
 
   <main>
+  <div class="mode-tabs" id="modeTabs">
+    <button class="mode-tab active" id="modeTabStock"><svg class="icon"><use href="#i-inbox"/></svg> Réception</button>
+    <button class="mode-tab" id="modeTabPrep"><svg class="icon"><use href="#i-outbox"/></svg> Préparation</button>
+  </div>
   <div id="stockView">
     <div class="panel">
       <div class="scan-row">
@@ -491,8 +502,7 @@
         </div>
       </div>
       <div class="row-btn2">
-        <button class="btn-ghost" id="btnPhotoRef"><svg class="icon"><use href="#i-camera"/></svg> Référence texte seule (sans code-barres)</button>
-        <button class="btn-ghost" id="btnOpenPrep"><svg class="icon"><use href="#i-outbox"/></svg> Préparation de commande</button>
+        <button class="btn-ghost" id="btnPhotoRef" style="flex:1 1 100%;"><svg class="icon"><use href="#i-camera"/></svg> Référence texte seule (sans code-barres)</button>
       </div>
       <div class="supplier-bar">
         <div class="supplier-current" id="supplierCurrent">— aucun fournisseur —</div>
@@ -538,12 +548,13 @@
         <p><b>✎ / ✕</b> : renommer ou supprimer une référence directement depuis la ligne.</p>
         <p><b>Annuler</b> apparaît après chaque scan ou changement de quantité, pour revenir en arrière en un geste.</p>
         <p><b>Synchro</b> : le catalogue code-barres → référence est partagé avec toute l'équipe en temps réel. Dès que quelqu'un identifie un code, tout le monde le voit. Les quantités et fournisseurs restent, eux, propres à cet appareil.</p>
+        <p><b>Catalogue</b>, <b>Historique</b>, <b>Thème</b> et <b>Verrouiller</b> sont regroupés dans le menu (icône ••• en haut à droite), pour garder l'écran principal dégagé.</p>
         <p><b>Catalogue</b> : voir, renommer, supprimer ou ajouter à la main toutes les correspondances code-barres → référence connues sur cet appareil.</p>
-        <p><b>Emplacements</b> : associe à une référence un ou plusieurs codes de rangement (ex. a1b = allée A, rayon 1, part B). Touche le tag sous une référence, ou l'icône épingle dans l'en-tête pour chercher où est rangée n'importe quelle référence, même hors de la feuille en cours. Partagé avec toute l'équipe en temps réel.</p>
+        <p><b>Emplacements</b> : associe à une référence un ou plusieurs codes de rangement (ex. a1b = allée A, rayon 1, part B). Touche le tag sous une référence, ou "Emplacements" dans le menu (•••) pour chercher où est rangée n'importe quelle référence, même hors de la feuille en cours. Partagé avec toute l'équipe en temps réel.</p>
         <p><b>Stock</b> : un total permanent par référence, partagé avec toute l'équipe, séparé de la feuille de réception (qui reste juste un compteur qu'on vide). La réception l'alimente automatiquement. <b>Préparation de commande</b> (bouton sous le scan) : scanner une pièce prélevée la retire directement de ce stock, même sans fournisseur ni feuille. Si ça tombe sous 0, c'est autorisé mais enregistré dans les <b>Anomalies</b> (bouton dans la page Préparation) pour vérification et correction plus tard.</p>
         <p><b>Historique</b> : chaque "Vider" garde une sauvegarde datée, consultable, exportable en CSV, ou restaurable sur la feuille en cours.</p>
         <p><b>Prénom</b> : sert à savoir qui a compté quoi (affiché sur les lignes et dans les exports), et à voir qui d'autre a l'app ouverte en même temps. <button id="btnChangeUserName" style="display:inline; background:none; border:none; padding:0; margin:0; font-size:12.5px; font-family:inherit; color:var(--accent); font-weight:700;">Ton prénom : <span id="userNameDisplay">(non défini)</span> — toucher pour changer</button></p>
-        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v52 — 19/09</b></p>
+        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v53 — 19/09</b></p>
       </div>
     </div>
   </div>
@@ -579,10 +590,6 @@
   </div>
 
   <div id="prepView" style="display:none;">
-    <button class="btn-secondary" id="btnBackToStockFromPrep" style="margin-top:0; margin-bottom:12px; display:flex; align-items:center; justify-content:center; gap:6px;">
-      <svg class="icon" style="width:1em;height:1em;"><use href="#i-backspace"/></svg> Retour à l'inventaire
-    </button>
-
     <div id="prepMainView">
       <div class="panel">
         <h2 style="margin:0 0 4px; font-size:16px;">Préparation de commande</h2>
@@ -696,6 +703,21 @@
     <button class="btn-secondary" id="btnSearchOnline"><svg class="icon"><use href="#i-search"/></svg> Chercher ce code en ligne</button>
     <button class="btn-primary" style="margin-top:10px;" id="btnConfirmRef">OK</button>
     <button class="btn-secondary" id="btnSkipRef">Plus tard</button>
+  </div>
+</div>
+
+<!-- Menu (regroupe les actions secondaires) -->
+<div class="modal-backdrop" id="moreMenuModal">
+  <div class="sheet">
+    <h2>Menu</h2>
+    <div class="move-list">
+      <button id="menuCatalog"><svg class="icon"><use href="#i-book"/></svg> Catalogue</button>
+      <button id="menuLocations"><svg class="icon"><use href="#i-pin"/></svg> Emplacements</button>
+      <button id="menuHistory"><svg class="icon"><use href="#i-clock"/></svg> Historique</button>
+      <button id="menuTheme"><svg class="icon"><use href="#i-theme"/></svg> Thème</button>
+      <button id="menuLock"><svg class="icon"><use href="#i-power"/></svg> Verrouiller</button>
+    </div>
+    <button class="btn-secondary" id="btnCloseMoreMenu">Fermer</button>
   </div>
 </div>
 
@@ -1385,7 +1407,8 @@
     renderAll();
   }
   document.getElementById('btnChangeUserName').addEventListener('click', askUserName);
-  document.getElementById('lockBtn').addEventListener('click', function(){
+  document.getElementById('menuLock').addEventListener('click', function(){
+    closeMoreMenu();
     $app.style.display = 'none';
     $lock.style.display = 'flex';
     pinBuffer = ''; renderPinDots(); setLockHint(' ');
@@ -1407,7 +1430,7 @@
     var t = localStorage.getItem(THEME_KEY);
     if(t && t !== 'auto') applyTheme(t);
   })();
-  document.getElementById('themeBtn').addEventListener('click', toggleTheme);
+  document.getElementById('menuTheme').addEventListener('click', function(){ closeMoreMenu(); toggleTheme(); });
 
   /* ================= Toast ================= */
   var toastTimer = null;
@@ -2803,7 +2826,8 @@
   document.getElementById('btnCloseCatalogX').addEventListener('click', function(){
     document.getElementById('catalogModal').classList.remove('show');
   });
-  document.getElementById('catalogBtn').addEventListener('click', function(){
+  document.getElementById('menuCatalog').addEventListener('click', function(){
+    closeMoreMenu();
     catalogFilterText = '';
     document.getElementById('catalogFilter').value = '';
     renderCatalogList();
@@ -2825,6 +2849,7 @@
     $stockView.style.display = 'none';
     $prepView.style.display = 'none';
     $locationsView.style.display = 'block';
+    document.getElementById('modeTabs').style.display = 'none';
     document.querySelector('.toolbar').style.display = 'none';
     document.getElementById('shelfDetailView').style.display = 'none';
     document.getElementById('locationsSearchView').style.display = 'block';
@@ -2834,19 +2859,29 @@
     window.scrollTo(0, 0);
     setTimeout(function(){ document.getElementById('locationsPageFilter').focus(); }, 150);
   }
+  // Les deux onglets du haut reflètent toujours la vue active, même quand
+  // on y arrive autrement qu'en tapant dessus (ex. bouton "Retour" depuis
+  // Emplacements ramène sur Réception).
+  function setModeTab(mode){
+    document.getElementById('modeTabStock').classList.toggle('active', mode === 'stock');
+    document.getElementById('modeTabPrep').classList.toggle('active', mode === 'prep');
+  }
   function showStockView(){
     $locationsView.style.display = 'none';
     $prepView.style.display = 'none';
     $stockView.style.display = 'block';
+    document.getElementById('modeTabs').style.display = 'flex';
     document.querySelector('.toolbar').style.display = '';
+    setModeTab('stock');
   }
-  document.getElementById('locationsBtn').addEventListener('click', showLocationsView);
+  document.getElementById('menuLocations').addEventListener('click', function(){ closeMoreMenu(); showLocationsView(); });
   document.getElementById('btnBackToStock').addEventListener('click', showStockView);
 
   function showPrepView(){
     $stockView.style.display = 'none';
     $locationsView.style.display = 'none';
     $prepView.style.display = 'block';
+    document.getElementById('modeTabs').style.display = 'flex';
     document.querySelector('.toolbar').style.display = 'none';
     document.getElementById('anomaliesView').style.display = 'none';
     document.getElementById('prepMainView').style.display = 'block';
@@ -2854,9 +2889,17 @@
     renderPrepStep();
     renderPrepSession();
     window.scrollTo(0, 0);
+    setModeTab('prep');
   }
-  document.getElementById('btnOpenPrep').addEventListener('click', showPrepView);
-  document.getElementById('btnBackToStockFromPrep').addEventListener('click', showStockView);
+  document.getElementById('modeTabStock').addEventListener('click', showStockView);
+  document.getElementById('modeTabPrep').addEventListener('click', showPrepView);
+
+  /* ================= Menu (regroupe Catalogue / Emplacements / Historique / Thème / Verrouiller) ================= */
+  function closeMoreMenu(){ document.getElementById('moreMenuModal').classList.remove('show'); }
+  document.getElementById('moreMenuBtn').addEventListener('click', function(){
+    document.getElementById('moreMenuModal').classList.add('show');
+  });
+  document.getElementById('btnCloseMoreMenu').addEventListener('click', closeMoreMenu);
   document.getElementById('anomaliesToggle').addEventListener('click', function(){
     document.getElementById('prepMainView').style.display = 'none';
     document.getElementById('anomaliesView').style.display = 'block';
@@ -3226,7 +3269,8 @@
     // toggleHistory ou clic hors action : ouvre/ferme le détail
     document.getElementById('historyDetail_'+id).classList.toggle('show');
   });
-  document.getElementById('historyBtn').addEventListener('click', function(){
+  document.getElementById('menuHistory').addEventListener('click', function(){
+    closeMoreMenu();
     renderHistoryList();
     document.getElementById('historyModal').classList.add('show');
   });
