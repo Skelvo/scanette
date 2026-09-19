@@ -574,7 +574,7 @@
         <p><b>Stock</b> : un total permanent par référence, partagé avec toute l'équipe, séparé de la feuille de réception (qui reste juste un compteur qu'on vide). La réception l'alimente automatiquement. <b>Préparation de commande</b> (bouton sous le scan) : scanner une pièce prélevée la retire directement de ce stock, même sans fournisseur ni feuille. Si ça tombe sous 0, c'est autorisé mais enregistré dans les <b>Anomalies</b> (bouton dans la page Préparation) pour vérification et correction plus tard.</p>
         <p><b>Historique</b> : chaque "Vider" garde une sauvegarde datée, consultable, exportable en CSV, ou restaurable sur la feuille en cours.</p>
         <p><b>Prénom</b> : sert à savoir qui a compté quoi (affiché sur les lignes et dans les exports), et à voir qui d'autre a l'app ouverte en même temps. <button id="btnChangeUserName" style="display:inline; background:none; border:none; padding:0; margin:0; font-size:12.5px; font-family:inherit; color:var(--accent); font-weight:700;">Ton prénom : <span id="userNameDisplay">(non défini)</span> — toucher pour changer</button></p>
-        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v55 — 19/09</b></p>
+        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v56 — 19/09</b></p>
       </div>
     </div>
   </div>
@@ -2402,9 +2402,11 @@
         if(nv === null) return;
         nv = parseInt(nv, 10);
         if(isNaN(nv) || nv < 0){ toast('Quantité invalide'); return; }
+        var prevQtyVal = item.qty;
+        item.qty = nv;
         if(nv === 0){ supplier.items = supplier.items.filter(function(it){ return it.id !== itemId; }); }
-        else item.qty = nv;
         saveState(); renderAll();
+        recordLastAction(supplier, item, false, prevQtyVal);
       });
       return;
     }
@@ -2446,8 +2448,14 @@
       return;
     }
     if(role === 'deleteRef'){
-      openConfirm('Supprimer cette référence ?', '"' + item.ref + '" sera retiré de la feuille.', function(){
+      openConfirm('Supprimer cette référence ?', '"' + item.ref + '" sera retiré de la feuille, et sa quantité (' + item.qty + ') sera retirée du stock partagé.', function(){
         supplier.items = supplier.items.filter(function(it){ return it.id !== itemId; });
+        if(item.qty){
+          var before = stock[item.ref] || 0;
+          adjustStock(item.ref, -item.qty, 'annulation');
+          var after = before - item.qty;
+          if(after < 0) logStockAnomaly(item.ref, before, item.qty, after);
+        }
         saveState(); renderAll();
         toast('Supprimé');
       });
@@ -2495,8 +2503,18 @@
   /* ================= Selection bar ================= */
   document.getElementById('btnCancelSel').addEventListener('click', function(){ selected.clear(); renderGroups(); updateSelectionBar(); });
   document.getElementById('btnDeleteSel').addEventListener('click', function(){
-    openConfirm('Supprimer la sélection ?', selected.size + ' référence(s) seront supprimées.', function(){
-      state.suppliers.forEach(function(s){ s.items = s.items.filter(function(it){ return !selected.has(it.id); }); });
+    openConfirm('Supprimer la sélection ?', selected.size + ' référence(s) seront supprimées, et leur quantité retirée du stock partagé.', function(){
+      state.suppliers.forEach(function(s){
+        s.items.forEach(function(it){
+          if(selected.has(it.id) && it.qty){
+            var before = stock[it.ref] || 0;
+            adjustStock(it.ref, -it.qty, 'annulation');
+            var after = before - it.qty;
+            if(after < 0) logStockAnomaly(it.ref, before, it.qty, after);
+          }
+        });
+        s.items = s.items.filter(function(it){ return !selected.has(it.id); });
+      });
       selected.clear();
       saveState(); renderAll();
       toast('Supprimé');
@@ -3334,7 +3352,7 @@
   /* ================= Stock — journal des mouvements ================= */
   var ledgerFilterText = '';
   var LEDGER_MOVEMENTS_MAX_ROWS = 150;
-  var MOVEMENT_TYPE_LABELS = { reception: 'Réception', prep: 'Préparation', correction: 'Correction' };
+  var MOVEMENT_TYPE_LABELS = { reception: 'Réception', prep: 'Préparation', correction: 'Correction', annulation: 'Suppression' };
   function lowStockRefs(){
     return Object.keys(stock)
       .filter(function(r){ return stock[r] <= lowStockThreshold; })
