@@ -577,7 +577,7 @@
         <p><b>Rotation des références</b> (menu •••) : classe les références par quantité totale sortie en Préparation, pour repérer ce qui part vite (ou pas du tout).</p>
         <p><b>Inventaire annuel</b> (onglet en haut) : scanne d'abord le code-barres d'un rayon — impossible de compter quoi que ce soit avant. Une fois ouvert, il liste tout ce qui doit s'y trouver (via Emplacements) et "Terminer le rayon" reste bloqué tant qu'il en manque. "Voir le rapport global" additionne les rayons terminés et affiche les écarts avec le stock système, exportables ou corrigeables en un clic (code de correction requis).</p>
         <p><b>Prénom</b> : sert à savoir qui a compté quoi (affiché sur les lignes et dans les exports), et à voir qui d'autre a l'app ouverte en même temps. <button id="btnChangeUserName" style="display:inline; background:none; border:none; padding:0; margin:0; font-size:12.5px; font-family:inherit; color:var(--accent); font-weight:700;">Ton prénom : <span id="userNameDisplay">(non défini)</span> — toucher pour changer</button></p>
-        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v65 — 19/09</b></p>
+        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v66 — 19/09</b></p>
       </div>
     </div>
   </div>
@@ -3716,11 +3716,14 @@
   });
   document.getElementById('btnResetInventory').addEventListener('click', function(){
     if(Object.keys(inventoryShelves).length === 0){ toast('Rien à réinitialiser'); return; }
-    openConfirm('Réinitialiser l\'inventaire ?', 'Efface tous les rayons comptés sur cet appareil (qui/quand compris). Le stock système n\'est pas touché. À faire avant de démarrer le prochain inventaire annuel.', function(){
-      inventoryShelves = {};
-      saveInventoryShelves();
-      renderInventoryShelvesList();
-      toast('Inventaire réinitialisé');
+    askCorrectionPin().then(function(ok){
+      if(!ok) return;
+      openConfirm('Réinitialiser l\'inventaire ?', 'Efface tous les rayons comptés sur cet appareil (qui/quand compris). Le stock système n\'est pas touché. À faire avant de démarrer le prochain inventaire annuel.', function(){
+        inventoryShelves = {};
+        saveInventoryShelves();
+        renderInventoryShelvesList();
+        toast('Inventaire réinitialisé');
+      });
     });
   });
 
