@@ -280,6 +280,18 @@
   .help-body{ font-size:12.5px; color:var(--text-dim); line-height:1.7; margin-top:10px; }
   .help-body b{ color:var(--text); }
 
+  /* ---------- Préparation de commande / stock ---------- */
+  .anomaly-badge{ background:var(--danger); color:#fff; font-family:var(--font-mono); font-weight:800; font-size:11.5px; border-radius:20px; padding:3px 9px; min-width:20px; text-align:center; }
+  .prep-session-row{ display:flex; justify-content:space-between; align-items:baseline; gap:8px; padding:8px 2px; border-bottom:1px solid var(--line); font-size:13px; }
+  .prep-session-row .ref{ font-family:var(--font-mono); font-weight:700; flex:1; min-width:0; overflow-wrap:break-word; }
+  .prep-session-row .delta{ font-family:var(--font-mono); font-weight:800; color:var(--danger); flex-shrink:0; }
+  .anomaly-row{ padding:11px 2px; border-bottom:1px solid var(--line); }
+  .anomaly-row .ref{ font-family:var(--font-mono); font-weight:800; font-size:15px; }
+  .anomaly-row .meta{ font-size:11.5px; color:var(--text-dim); margin-top:3px; line-height:1.6; }
+  .anomaly-row .meta b{ color:var(--danger); }
+  .anomaly-row.resolved{ opacity:.5; }
+  .anomaly-row .row-actions{ margin-top:8px; }
+
   /* ---------- Dernière action / Annuler ---------- */
   .last-action-bar{
     display:none; align-items:center; gap:10px; position:fixed; left:16px; right:16px;
@@ -419,6 +431,8 @@
     <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6 7l1 13h10l1-13"/></symbol>
     <symbol id="i-inbox" viewBox="0 0 24 24"><path d="M4 12h4l2 3h4l2-3h4"/><path d="M6 5h12l2 7v7H4v-7l2-7Z"/></symbol>
     <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s7-6.7 7-11.5A7 7 0 0 0 5 9.5C5 14.3 12 21 12 21Z"/><circle cx="12" cy="9.5" r="2.4"/></symbol>
+    <symbol id="i-outbox" viewBox="0 0 24 24"><path d="M4 12h4l2 3h4l2-3h4"/><path d="M6 5h12l2 7v7H4v-7l2-7Z"/><path d="M12 3v7M9 7l3-3 3 3"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3 2 20h20L12 3Z"/><path d="M12 10v4"/><circle cx="12" cy="17" r="0.6" fill="currentColor" stroke="none"/></symbol>
   </defs>
 </svg>
 
@@ -478,6 +492,7 @@
       </div>
       <div class="row-btn2">
         <button class="btn-ghost" id="btnPhotoRef"><svg class="icon"><use href="#i-camera"/></svg> Référence texte seule (sans code-barres)</button>
+        <button class="btn-ghost" id="btnOpenPrep"><svg class="icon"><use href="#i-outbox"/></svg> Préparation de commande</button>
       </div>
       <div class="supplier-bar">
         <div class="supplier-current" id="supplierCurrent">— aucun fournisseur —</div>
@@ -525,9 +540,10 @@
         <p><b>Synchro</b> : le catalogue code-barres → référence est partagé avec toute l'équipe en temps réel. Dès que quelqu'un identifie un code, tout le monde le voit. Les quantités et fournisseurs restent, eux, propres à cet appareil.</p>
         <p><b>Catalogue</b> : voir, renommer, supprimer ou ajouter à la main toutes les correspondances code-barres → référence connues sur cet appareil.</p>
         <p><b>Emplacements</b> : associe à une référence un ou plusieurs codes de rangement (ex. a1b = allée A, rayon 1, part B). Touche le tag sous une référence, ou l'icône épingle dans l'en-tête pour chercher où est rangée n'importe quelle référence, même hors de la feuille en cours. Partagé avec toute l'équipe en temps réel.</p>
+        <p><b>Stock</b> : un total permanent par référence, partagé avec toute l'équipe, séparé de la feuille de réception (qui reste juste un compteur qu'on vide). La réception l'alimente automatiquement. <b>Préparation de commande</b> (bouton sous le scan) : scanner une pièce prélevée la retire directement de ce stock, même sans fournisseur ni feuille. Si ça tombe sous 0, c'est autorisé mais enregistré dans les <b>Anomalies</b> (bouton dans la page Préparation) pour vérification et correction plus tard.</p>
         <p><b>Historique</b> : chaque "Vider" garde une sauvegarde datée, consultable, exportable en CSV, ou restaurable sur la feuille en cours.</p>
         <p><b>Prénom</b> : sert à savoir qui a compté quoi (affiché sur les lignes et dans les exports), et à voir qui d'autre a l'app ouverte en même temps. <button id="btnChangeUserName" style="display:inline; background:none; border:none; padding:0; margin:0; font-size:12.5px; font-family:inherit; color:var(--accent); font-weight:700;">Ton prénom : <span id="userNameDisplay">(non défini)</span> — toucher pour changer</button></p>
-        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v51 — 18/09</b></p>
+        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v52 — 19/09</b></p>
       </div>
     </div>
   </div>
@@ -559,6 +575,63 @@
         <p class="sub" id="shelfDetailSub" style="margin:0;"></p>
       </div>
       <div id="shelfDetailList"></div>
+    </div>
+  </div>
+
+  <div id="prepView" style="display:none;">
+    <button class="btn-secondary" id="btnBackToStockFromPrep" style="margin-top:0; margin-bottom:12px; display:flex; align-items:center; justify-content:center; gap:6px;">
+      <svg class="icon" style="width:1em;height:1em;"><use href="#i-backspace"/></svg> Retour à l'inventaire
+    </button>
+
+    <div id="prepMainView">
+      <div class="panel">
+        <h2 style="margin:0 0 4px; font-size:16px;">Préparation de commande</h2>
+        <p class="sub" style="margin:0 0 14px;">Scanne ce que tu prélèves : ça retire directement du stock partagé, sans passer par une feuille de fournisseur.</p>
+        <div class="scan-row">
+          <button class="btn-scan" id="btnPrepScan" style="background:var(--danger);"><svg class="icon icon-fill"><use href="#i-play"/></svg>&nbsp;SCANNER UN RETRAIT</button>
+          <div class="stepper">
+            <button id="prepStepDown">−</button>
+            <div class="val" id="prepStepVal">×1</div>
+            <button id="prepStepUp">+</button>
+          </div>
+        </div>
+        <button class="btn-secondary" id="btnPrepManualRef" style="margin-top:10px;">Taper la référence à la main</button>
+      </div>
+
+      <div class="panel">
+        <div class="help-toggle" id="anomaliesToggle">
+          <b style="font-size:13px;">Anomalies de stock</b>
+          <span class="anomaly-badge" id="anomalyBadge" style="display:none;">0</span>
+        </div>
+      </div>
+
+      <div class="last-action-bar" id="prepLastActionBar" style="position:static; display:none; max-width:none; margin:0 0 12px;">
+        <div class="laa-info">
+          <span class="laa-ref" id="prepLaaRef"></span>
+          <span class="laa-delta" id="prepLaaDelta"></span>
+        </div>
+        <button id="btnUndoPrepLast">↩ Annuler</button>
+      </div>
+
+      <div class="panel">
+        <div class="help-toggle" id="prepSessionToggle">
+          <b style="font-size:13px;">Prélevé dans cette session</b>
+          <button class="row-icon-btn" id="btnClearPrepSession" title="Vider la session">Vider</button>
+        </div>
+        <div id="prepSessionList"><p class="sub" style="margin:8px 0 0;">Rien de prélevé pour l'instant.</p></div>
+      </div>
+    </div>
+
+    <div id="anomaliesView" style="display:none;">
+      <button class="btn-secondary" id="btnBackToPrepFromAnomalies" style="margin-bottom:12px;">← Retour à la préparation</button>
+      <div class="panel">
+        <h2 style="margin:0 0 4px; font-size:16px;">Anomalies de stock</h2>
+        <p class="sub" id="anomaliesSub" style="margin:0;">Chaque retrait qui a fait tomber une référence sous 0 — à vérifier et corriger.</p>
+      </div>
+      <div class="filter-row" style="margin-bottom:8px;">
+        <button class="btn-secondary" id="btnToggleResolvedAnomalies" style="margin-top:0;">Voir aussi les corrigées</button>
+      </div>
+      <div id="anomaliesList"></div>
     </div>
   </div>
   </main>
@@ -728,6 +801,9 @@
   var STORE_KEY = 'scanette_data_v1';
   var CATALOG_KEY = 'scanette_catalog_v1';
   var LOCATIONS_KEY = 'scanette_locations_v1';
+  var STOCK_KEY = 'scanette_stock_v1';
+  var ANOMALIES_KEY = 'scanette_anomalies_v1';
+  var PREP_SESSION_KEY = 'scanette_prep_session_v1';
   var PIN_KEY = 'scanette_pin_v1';
   var THEME_KEY = 'scanette_theme_v1';
   var SORT_KEY = 'scanette_sort_v1';
@@ -737,6 +813,12 @@
   var state = loadState();
   var catalog = loadCatalog(); // { code: refName } — local cache; source of truth is the shared db when connected
   var locations = loadLocations(); // { ref: [emplacement, ...] } — répertoire à part, indépendant de l'inventaire courant
+  // Stock partagé permanent, indépendant de la feuille de réception : la
+  // réception l'alimente en plus (jamais vidé par "Vider"), la préparation
+  // de commande le décrémente. { ref: quantité }
+  var stock = loadStock();
+  var anomalies = loadAnomalies(); // retraits qui ont fait passer un stock sous 0, à vérifier chaque jour
+  var prepSession = loadPrepSession(); // ce qui a été prélevé sur CET appareil depuis le dernier "Vider" de la session prépa
   var history = loadHistory(); // sauvegardes automatiques créées à chaque "Vider"
   var selected = new Set();
   var listFilterText = '';
@@ -786,6 +868,8 @@
     return ax.length - bx.length;
   }
   var scanStep = 1;
+  var prepStep = 1; // multiplicateur de retrait, séparé de scanStep (réception)
+  var scanPurpose = 'reception'; // 'reception' | 'prep' — décide ce que fait onDetectedCode()
   var pendingCode = null; // barcode awaiting reference choice
   var lastDetected = { code: null, t: 0 };
   // Exige 2 lectures consécutives identiques avant de valider un code —
@@ -844,6 +928,36 @@
       saveLocations();
       writeLocationEntry(ref, codes);
     }
+  }
+  function loadStock(){
+    try{
+      var raw = localStorage.getItem(STOCK_KEY);
+      if(raw) return JSON.parse(raw);
+    }catch(e){}
+    return {};
+  }
+  function saveStock(){
+    try{ localStorage.setItem(STOCK_KEY, JSON.stringify(stock)); }catch(e){}
+  }
+  function loadAnomalies(){
+    try{
+      var raw = localStorage.getItem(ANOMALIES_KEY);
+      if(raw) return JSON.parse(raw);
+    }catch(e){}
+    return [];
+  }
+  function saveAnomalies(){
+    try{ localStorage.setItem(ANOMALIES_KEY, JSON.stringify(anomalies)); }catch(e){}
+  }
+  function loadPrepSession(){
+    try{
+      var raw = localStorage.getItem(PREP_SESSION_KEY);
+      if(raw) return JSON.parse(raw);
+    }catch(e){}
+    return [];
+  }
+  function savePrepSession(){
+    try{ localStorage.setItem(PREP_SESSION_KEY, JSON.stringify(prepSession)); }catch(e){}
   }
   function loadHistory(){
     try{
@@ -927,6 +1041,8 @@
         migrateLocalCatalogToDb(existingCodes);
       }
       initSharedLocations();
+      initSharedStock();
+      initSharedAnomalies();
     }catch(e){
       console.error(e);
       db = null;
@@ -1047,6 +1163,113 @@
   function deleteLocationEntry(ref){
     if(!db || !ref) return;
     db.from('locations').delete().eq('ref', String(ref))
+      .then(function(res){ if(res.error) console.error(res.error); });
+  }
+
+  /* ================= Stock partagé (Supabase) ================= */
+  // Table "stock" (ref text primary key, qty int, updated_at) + fonction
+  // SQL "increment_stock(p_ref, p_delta)" à créer côté Supabase (voir
+  // README). Un incrément côté client passerait par une lecture puis une
+  // écriture séparées : deux appareils qui scannent en même temps
+  // écraseraient l'un le travail de l'autre. La fonction SQL fait
+  // l'addition directement dans la base, donc chaque scan s'additionne
+  // vraiment, même en même temps depuis plusieurs téléphones.
+  async function initSharedStock(){
+    if(!db) return;
+    try{
+      var res = await db.from('stock').select('ref, qty');
+      if(res.error) throw res.error;
+      var changed = false;
+      (res.data || []).forEach(function(row){
+        if(stock[row.ref] !== row.qty){ stock[row.ref] = row.qty; changed = true; }
+      });
+      if(changed) saveStock();
+    }catch(e){ console.error(e); return; }
+
+    db.channel('stock-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'stock' }, function(payload){
+        var row = payload.eventType === 'DELETE' ? payload.old : payload.new;
+        if(!row || !row.ref) return;
+        stock[row.ref] = payload.eventType === 'DELETE' ? 0 : row.qty;
+        saveStock();
+        renderGroups();
+        if(isPrepViewOpen()) renderPrepSession();
+      })
+      .subscribe();
+  }
+  // Optimiste en local tout de suite (retour immédiat à l'écran), puis
+  // l'incrément atomique côté serveur ; le canal temps réel ci-dessus
+  // rattrapera la valeur exacte si un autre appareil a scanné entre-temps.
+  function adjustStock(ref, delta){
+    if(!ref || !delta) return;
+    ref = normalizeRef(ref);
+    stock[ref] = (stock[ref] || 0) + delta;
+    saveStock();
+    if(!db) return;
+    db.rpc('increment_stock', { p_ref: String(ref), p_delta: delta })
+      .then(function(res){ if(res.error) console.error(res.error); });
+  }
+
+  /* ================= Anomalies de stock (Supabase) ================= */
+  async function initSharedAnomalies(){
+    if(!db) return;
+    try{
+      var res = await db.from('stock_anomalies').select('*').order('at', { ascending: false }).limit(500);
+      if(res.error) throw res.error;
+      anomalies = res.data || [];
+      saveAnomalies();
+      renderAnomalyBadge();
+    }catch(e){ console.error(e); return; }
+
+    db.channel('anomalies-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'stock_anomalies' }, function(payload){
+        if(payload.eventType === 'INSERT'){
+          // Peut être l'écho de notre propre insert optimiste (même id,
+          // déjà ajouté localement dans logStockAnomaly) : on remplace
+          // plutôt que d'ajouter une deuxième ligne.
+          var existingIdx = anomalies.findIndex(function(a){ return a.id === payload.new.id; });
+          if(existingIdx !== -1) anomalies[existingIdx] = payload.new;
+          else anomalies.unshift(payload.new);
+        } else if(payload.eventType === 'UPDATE'){
+          var i = anomalies.findIndex(function(a){ return a.id === payload.new.id; });
+          if(i !== -1) anomalies[i] = payload.new; else anomalies.unshift(payload.new);
+        } else if(payload.eventType === 'DELETE'){
+          anomalies = anomalies.filter(function(a){ return a.id !== payload.old.id; });
+        }
+        saveAnomalies();
+        renderAnomalyBadge();
+        if(isPrepViewOpen() && document.getElementById('anomaliesView').style.display !== 'none') renderAnomaliesList();
+      })
+      .subscribe();
+  }
+  function logStockAnomaly(ref, before, requested, after){
+    var entry = {
+      id: uid(), ref: ref, qty_before: before, qty_requested: requested, qty_after: after,
+      by: currentUser || null, at: new Date().toISOString(), resolved: false
+    };
+    anomalies.unshift(entry);
+    saveAnomalies();
+    renderAnomalyBadge();
+    if(!db) return;
+    // On envoie notre id généré localement (plutôt que d'en laisser
+    // générer un côté serveur) pour que l'écho temps réel de cet insert
+    // porte le même id, et que la déduplication dans le canal réalise
+    // "déjà vu, on remplace" plutôt que d'ajouter une deuxième ligne.
+    db.from('stock_anomalies').insert({
+      id: entry.id, ref: ref, qty_before: before, qty_requested: requested, qty_after: after,
+      by: currentUser || null, at: entry.at, resolved: false
+    }).then(function(res){ if(res.error) console.error(res.error); });
+  }
+  function resolveAnomaly(id){
+    var a = anomalies.find(function(x){ return x.id === id; });
+    if(a) a.resolved = true;
+    saveAnomalies();
+    renderAnomalyBadge();
+    if(!db || !a) return;
+    // Les entrées créées hors ligne ont un id local (uid()) qui ne
+    // correspond à aucune ligne côté serveur — pas de mise à jour à distance
+    // possible pour celles-là tant qu'elles n'ont pas été synchronisées.
+    db.from('stock_anomalies').update({ resolved: true }).eq('id', id)
       .then(function(res){ if(res.error) console.error(res.error); });
   }
 
@@ -1480,6 +1703,9 @@
     // il a déjà été retiré de supplier.items au moment de l'appel, et "Annuler"
     // devra le réinsérer plutôt que de chercher un id qui n'existe plus.
     lastAction = { supplierId: supplier.id, itemId: item.id, wasNew: wasNew, prevQty: prevQty, delta: item.qty - prevQty, itemSnapshot: JSON.parse(JSON.stringify(item)) };
+    // La réception alimente aussi le stock partagé permanent, en plus de la
+    // feuille par fournisseur — jamais vidé par "Vider".
+    adjustStock(item.ref, lastAction.delta);
     document.getElementById('laaRef').innerHTML = refBreakHtml(item.ref);
     document.getElementById('laaDelta').textContent = (lastAction.delta >= 0 ? '+' : '') + lastAction.delta + '  →  ×' + item.qty;
     var bar = document.getElementById('lastActionBar');
@@ -1506,6 +1732,7 @@
   });
   function undoLastAction(){
     if(!lastAction) return;
+    if(lastAction.itemSnapshot) adjustStock(lastAction.itemSnapshot.ref, -lastAction.delta);
     var supplier = getSupplier(lastAction.supplierId);
     if(supplier){
       if(lastAction.wasNew){
@@ -1807,7 +2034,8 @@
     lastDetected = { code: code, t: now };
     if(navigator.vibrate) navigator.vibrate(60);
     beep();
-    handleScannedCode(code);
+    if(scanPurpose === 'prep') handlePrepScannedCode(code);
+    else handleScannedCode(code);
   }
 
   function stopScan(){
@@ -1831,7 +2059,8 @@
     pendingConfirmCode = null;
     pendingConfirmCount = 0;
   }
-  document.getElementById('btnScan').addEventListener('click', startScan);
+  document.getElementById('btnScan').addEventListener('click', function(){ scanPurpose = 'reception'; startScan(); });
+  document.getElementById('btnPrepScan').addEventListener('click', function(){ scanPurpose = 'prep'; startScan(); });
   document.getElementById('btnCloseScan').addEventListener('click', stopScan);
 
   // Filet de secours : un trait effacé ou un code écrasé, c'est une info perdue sur
@@ -1845,7 +2074,8 @@
       code = code.trim();
       if(!code){ toast('Entre un code'); return; }
       beep();
-      handleScannedCode(code);
+      if(scanPurpose === 'prep') handlePrepScannedCode(code);
+      else handleScannedCode(code);
     });
   });
 
@@ -2587,10 +2817,13 @@
   // un vrai retour en arrière plutôt qu'une fermeture de panneau.
   var $stockView = document.getElementById('stockView');
   var $locationsView = document.getElementById('locationsView');
+  var $prepView = document.getElementById('prepView');
   var locationsFilterText = '';
   function isLocationsViewOpen(){ return $locationsView.style.display !== 'none'; }
+  function isPrepViewOpen(){ return $prepView.style.display !== 'none'; }
   function showLocationsView(){
     $stockView.style.display = 'none';
+    $prepView.style.display = 'none';
     $locationsView.style.display = 'block';
     document.querySelector('.toolbar').style.display = 'none';
     document.getElementById('shelfDetailView').style.display = 'none';
@@ -2603,11 +2836,37 @@
   }
   function showStockView(){
     $locationsView.style.display = 'none';
+    $prepView.style.display = 'none';
     $stockView.style.display = 'block';
     document.querySelector('.toolbar').style.display = '';
   }
   document.getElementById('locationsBtn').addEventListener('click', showLocationsView);
   document.getElementById('btnBackToStock').addEventListener('click', showStockView);
+
+  function showPrepView(){
+    $stockView.style.display = 'none';
+    $locationsView.style.display = 'none';
+    $prepView.style.display = 'block';
+    document.querySelector('.toolbar').style.display = 'none';
+    document.getElementById('anomaliesView').style.display = 'none';
+    document.getElementById('prepMainView').style.display = 'block';
+    prepStep = 1;
+    renderPrepStep();
+    renderPrepSession();
+    window.scrollTo(0, 0);
+  }
+  document.getElementById('btnOpenPrep').addEventListener('click', showPrepView);
+  document.getElementById('btnBackToStockFromPrep').addEventListener('click', showStockView);
+  document.getElementById('anomaliesToggle').addEventListener('click', function(){
+    document.getElementById('prepMainView').style.display = 'none';
+    document.getElementById('anomaliesView').style.display = 'block';
+    renderAnomaliesList();
+    window.scrollTo(0, 0);
+  });
+  document.getElementById('btnBackToPrepFromAnomalies').addEventListener('click', function(){
+    document.getElementById('anomaliesView').style.display = 'none';
+    document.getElementById('prepMainView').style.display = 'block';
+  });
 
   // Tous les codes-barres connus pour une référence (catalogue + articles de
   // la feuille en cours), pour qu'une recherche par code-barres trouve aussi
@@ -2753,6 +3012,141 @@
     });
   });
 
+  /* ================= Préparation de commande ================= */
+  function renderPrepStep(){
+    document.getElementById('prepStepVal').textContent = '×' + prepStep;
+  }
+  document.getElementById('prepStepUp').addEventListener('click', function(){ prepStep = Math.min(99, prepStep + 1); renderPrepStep(); });
+  document.getElementById('prepStepDown').addEventListener('click', function(){ prepStep = Math.max(1, prepStep - 1); renderPrepStep(); });
+
+  // Résout un code scanné en référence via le catalogue partagé uniquement
+  // — pas via la feuille de réception de CET appareil, qui n'a aucune
+  // raison de contenir ce que quelqu'un d'autre a réceptionné ailleurs.
+  function handlePrepScannedCode(code){
+    var refName = catalog[code];
+    if(!refName){
+      flashScan(false);
+      pauseScanning();
+      askInput('Code inconnu — quelle référence retires-tu ?', '', 'text', true).then(function(val){
+        resumeScanning();
+        val = normalizeRef(val);
+        if(!val) return;
+        applyPrepPick(val, prepStep);
+      });
+      return;
+    }
+    flashScan(true);
+    applyPrepPick(refName, prepStep);
+  }
+
+  var lastPrepAction = null; // { ref, qty } — pour "Annuler"
+  var lastPrepActionTimer = null;
+  function applyPrepPick(ref, qty){
+    ref = normalizeRef(ref);
+    if(!ref || !qty) return;
+    var before = stock[ref] || 0;
+    adjustStock(ref, -qty);
+    var after = before - qty;
+    if(after < 0){
+      logStockAnomaly(ref, before, qty, after);
+      toast('⚠ ' + ref + ' — stock insuffisant (' + before + ' dispo, ' + qty + ' retiré)', 3400);
+    } else {
+      toast(ref + '  −' + qty + '  →  reste ' + after);
+    }
+    prepSession.unshift({ ref: ref, qty: qty, after: after, at: new Date().toISOString(), by: currentUser || null });
+    savePrepSession();
+    renderPrepSession();
+    lastPrepAction = { ref: ref, qty: qty };
+    document.getElementById('prepLaaRef').innerHTML = refBreakHtml(ref);
+    document.getElementById('prepLaaDelta').textContent = '−' + qty + '  →  reste ' + after;
+    var bar = document.getElementById('prepLastActionBar');
+    bar.style.display = 'flex';
+    clearTimeout(lastPrepActionTimer);
+    lastPrepActionTimer = setTimeout(function(){ bar.style.display = 'none'; }, 6000);
+  }
+  document.getElementById('btnUndoPrepLast').addEventListener('click', function(){
+    if(!lastPrepAction) return;
+    adjustStock(lastPrepAction.ref, lastPrepAction.qty);
+    if(prepSession.length) prepSession.shift();
+    savePrepSession();
+    renderPrepSession();
+    document.getElementById('prepLastActionBar').style.display = 'none';
+    clearTimeout(lastPrepActionTimer);
+    toast('Annulé');
+    lastPrepAction = null;
+  });
+  document.getElementById('btnPrepManualRef').addEventListener('click', function(){
+    askInput('Référence retirée', '', 'text', true).then(function(val){
+      val = normalizeRef(val);
+      if(!val) return;
+      applyPrepPick(val, prepStep);
+    });
+  });
+  document.getElementById('btnClearPrepSession').addEventListener('click', function(){
+    if(prepSession.length === 0) return;
+    openConfirm('Vider la session de préparation ?', 'La liste ci-dessous sera vidée sur cet appareil. Le stock déjà retiré n\'est PAS remis — seul l\'historique de cette liste disparaît.', function(){
+      prepSession = [];
+      savePrepSession();
+      renderPrepSession();
+      toast('Session vidée');
+    });
+  });
+  function renderPrepSession(){
+    var wrap = document.getElementById('prepSessionList');
+    if(prepSession.length === 0){
+      wrap.innerHTML = '<p class="sub" style="margin:8px 0 0;">Rien de prélevé pour l\'instant.</p>';
+      return;
+    }
+    var html = '';
+    prepSession.forEach(function(p){
+      html += '<div class="prep-session-row"><span class="ref">' + refBreakHtml(p.ref) + '</span><span class="delta">−' + p.qty + ' · reste ' + p.after + '</span></div>';
+    });
+    wrap.innerHTML = html;
+  }
+
+  /* ================= Anomalies de stock ================= */
+  var showResolvedAnomalies = false;
+  function renderAnomalyBadge(){
+    var el = document.getElementById('anomalyBadge');
+    var n = anomalies.filter(function(a){ return !a.resolved; }).length;
+    if(n > 0){ el.style.display = ''; el.textContent = n; }
+    else el.style.display = 'none';
+  }
+  function formatAnomalyDate(iso){
+    var d = new Date(iso);
+    return d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' }) + ' ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  }
+  function renderAnomaliesList(){
+    var wrap = document.getElementById('anomaliesList');
+    var list = showResolvedAnomalies ? anomalies : anomalies.filter(function(a){ return !a.resolved; });
+    document.getElementById('anomaliesSub').textContent = list.length + (showResolvedAnomalies ? ' anomalie(s) au total.' : ' anomalie(s) non corrigée(s).');
+    if(list.length === 0){
+      wrap.innerHTML = '<div class="panel empty-state"><p>' + (showResolvedAnomalies ? 'Aucune anomalie enregistrée.' : 'Aucune anomalie en attente — tout est corrigé.') + '</p></div>';
+      return;
+    }
+    var html = '<div class="panel">';
+    list.forEach(function(a){
+      html += '<div class="anomaly-row' + (a.resolved ? ' resolved' : '') + '">';
+      html += '<div class="ref">' + refBreakHtml(a.ref) + '</div>';
+      html += '<div class="meta">' + formatAnomalyDate(a.at) + (a.by ? ' · ' + escapeHtml(a.by) : '') + '<br>Stock ' + a.qty_before + ' → retrait de ' + a.qty_requested + ' → <b>' + a.qty_after + '</b></div>';
+      if(!a.resolved) html += '<div class="row-actions"><button class="btn-secondary" style="margin-top:0;" data-role="resolveAnomaly" data-id="' + escapeHtml(a.id) + '">Marquer corrigé</button></div>';
+      html += '</div>';
+    });
+    html += '</div>';
+    wrap.innerHTML = html;
+  }
+  document.getElementById('anomaliesList').addEventListener('click', function(e){
+    var btn = e.target.closest('[data-role="resolveAnomaly"]'); if(!btn) return;
+    resolveAnomaly(btn.getAttribute('data-id'));
+    renderAnomaliesList();
+    toast('Marqué corrigé');
+  });
+  document.getElementById('btnToggleResolvedAnomalies').addEventListener('click', function(){
+    showResolvedAnomalies = !showResolvedAnomalies;
+    this.textContent = showResolvedAnomalies ? 'Cacher les corrigées' : 'Voir aussi les corrigées';
+    renderAnomaliesList();
+  });
+
   /* ================= Historique ================= */
   function formatHistoryDate(iso){
     var d = new Date(iso);
@@ -2847,6 +3241,7 @@
   renderPinDots();
   renderSortToggle();
   renderUserName();
+  renderAnomalyBadge();
   showLockStep();
   initSharedCatalog();
 })();
