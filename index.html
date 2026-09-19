@@ -574,7 +574,7 @@
         <p><b>Stock</b> : un total permanent par référence, partagé avec toute l'équipe, séparé de la feuille de réception (qui reste juste un compteur qu'on vide). La réception l'alimente automatiquement. <b>Préparation de commande</b> (bouton sous le scan) : scanner une pièce prélevée la retire directement de ce stock, même sans fournisseur ni feuille. Si ça tombe sous 0, c'est autorisé mais enregistré dans les <b>Anomalies</b> (bouton dans la page Préparation) pour vérification et correction plus tard.</p>
         <p><b>Historique</b> : chaque "Vider" garde une sauvegarde datée, consultable, exportable en CSV, ou restaurable sur la feuille en cours.</p>
         <p><b>Prénom</b> : sert à savoir qui a compté quoi (affiché sur les lignes et dans les exports), et à voir qui d'autre a l'app ouverte en même temps. <button id="btnChangeUserName" style="display:inline; background:none; border:none; padding:0; margin:0; font-size:12.5px; font-family:inherit; color:var(--accent); font-weight:700;">Ton prénom : <span id="userNameDisplay">(non défini)</span> — toucher pour changer</button></p>
-        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v60 — 19/09</b></p>
+        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v61 — 19/09</b></p>
       </div>
     </div>
   </div>
@@ -755,6 +755,7 @@
       <button id="menuStockCorrectPinChange"><svg class="icon"><use href="#i-refresh"/></svg> Changer le code de correction</button>
       <button id="menuStockThreshold"><svg class="icon"><use href="#i-alert"/></svg> Seuil d'alerte stock bas</button>
       <button id="menuStockExport"><svg class="icon"><use href="#i-file"/></svg> Exporter le stock (CSV)</button>
+      <button id="menuMovementsExport"><svg class="icon"><use href="#i-file"/></svg> Exporter le journal (CSV)</button>
       <button id="menuTheme"><svg class="icon"><use href="#i-theme"/></svg> Thème</button>
       <button id="menuLock"><svg class="icon"><use href="#i-power"/></svg> Verrouiller</button>
     </div>
@@ -3656,6 +3657,16 @@
     });
     var blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv' });
     downloadFile('stock_' + new Date().toISOString().slice(0, 10) + '.csv', blob);
+  });
+  document.getElementById('menuMovementsExport').addEventListener('click', function(){
+    closeMoreMenu();
+    if(stockMovements.length === 0){ toast('Aucun mouvement à exporter'); return; }
+    var lines = [csvRow(['Date', 'Référence', 'Type', 'Mouvement', 'Quantité après', 'Par'])];
+    stockMovements.forEach(function(m){
+      lines.push(csvRow([formatHistoryDate(m.at), m.ref, MOVEMENT_TYPE_LABELS[m.type] || m.type, (m.delta >= 0 ? '+' : '') + m.delta, m.qty_after, m.by || '']));
+    });
+    var blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv' });
+    downloadFile('journal_mouvements_' + new Date().toISOString().slice(0, 10) + '.csv', blob);
   });
 
   /* ================= Historique ================= */
