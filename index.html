@@ -574,7 +574,7 @@
         <p><b>Stock</b> : un total permanent par référence, partagé avec toute l'équipe, séparé de la feuille de réception (qui reste juste un compteur qu'on vide). La réception l'alimente automatiquement. <b>Préparation de commande</b> (bouton sous le scan) : scanner une pièce prélevée la retire directement de ce stock, même sans fournisseur ni feuille. Si ça tombe sous 0, c'est autorisé mais enregistré dans les <b>Anomalies</b> (bouton dans la page Préparation) pour vérification et correction plus tard.</p>
         <p><b>Historique</b> : chaque "Vider" garde une sauvegarde datée, consultable, exportable en CSV, ou restaurable sur la feuille en cours.</p>
         <p><b>Prénom</b> : sert à savoir qui a compté quoi (affiché sur les lignes et dans les exports), et à voir qui d'autre a l'app ouverte en même temps. <button id="btnChangeUserName" style="display:inline; background:none; border:none; padding:0; margin:0; font-size:12.5px; font-family:inherit; color:var(--accent); font-weight:700;">Ton prénom : <span id="userNameDisplay">(non défini)</span> — toucher pour changer</button></p>
-        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v53 — 19/09</b></p>
+        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v54 — 19/09</b></p>
       </div>
     </div>
   </div>
@@ -3366,7 +3366,10 @@
     if(!q){ renderLowStockSummary(wrap); return; }
     var allRefs = {};
     Object.keys(stock).forEach(function(r){ allRefs[r] = true; });
-    Object.keys(catalog).forEach(function(r){ allRefs[r] = true; });
+    // catalog est {code-barres: référence} : on veut chercher parmi les noms
+    // de référence, pas parmi les codes-barres bruts (une longue chaîne
+    // scannée, comme une URL de QR code, matcherait n'importe quelle lettre).
+    Object.keys(catalog).forEach(function(code){ if(catalog[code]) allRefs[catalog[code]] = true; });
     var refs = Object.keys(allRefs).filter(function(r){ return r.toUpperCase().indexOf(q) !== -1; });
     refs.sort(naturalCompare);
     if(refs.length > 12) refs = refs.slice(0, 12);
