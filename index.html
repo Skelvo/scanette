@@ -164,6 +164,7 @@
   .mode-tab .icon{ flex-shrink:0; width:1em; height:1em; }
   .mode-tab.active{ background:var(--surface); color:var(--text); box-shadow:0 1px 3px rgba(0,0,0,.2); }
   .mode-tab#modeTabPrep.active{ color:var(--danger); }
+  .tab-badge-dot{ display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--danger); margin-left:1px; flex-shrink:0; }
 
   .scan-row{ display:flex; gap:10px; align-items:stretch; }
   .btn-scan{
@@ -303,9 +304,11 @@
   .anomaly-row.resolved{ opacity:.5; }
   .anomaly-row .row-actions{ margin-top:8px; }
 
-  .stock-qty-card{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  .stock-qty-card{ display:flex; align-items:center; justify-content:space-between; gap:10px; cursor:pointer; }
+  .stock-qty-card:active{ background:var(--surface-2); }
   .stock-qty-card .ref{ font-family:var(--font-mono); font-weight:800; font-size:16px; overflow-wrap:break-word; }
-  .stock-qty-card .qty{ font-family:var(--font-mono); font-weight:800; font-size:26px; color:var(--accent); flex-shrink:0; }
+  .stock-qty-card .qty{ font-family:var(--font-mono); font-weight:800; font-size:26px; color:var(--text); flex-shrink:0; }
+  .stock-qty-card .qty.low{ color:var(--accent); }
   .stock-qty-card .qty.negative{ color:var(--danger); }
   .move-row{ display:flex; align-items:center; gap:10px; padding:10px 2px; border-bottom:1px solid var(--line); }
   .move-row .move-delta{
@@ -506,7 +509,7 @@
   <div class="mode-tabs" id="modeTabs">
     <button class="mode-tab active" id="modeTabStock"><svg class="icon"><use href="#i-inbox"/></svg> Réception</button>
     <button class="mode-tab" id="modeTabPrep"><svg class="icon"><use href="#i-outbox"/></svg> Préparation</button>
-    <button class="mode-tab" id="modeTabLedger"><svg class="icon"><use href="#i-clock"/></svg> Stock</button>
+    <button class="mode-tab" id="modeTabLedger"><svg class="icon"><use href="#i-clock"/></svg> Stock<span class="tab-badge-dot" id="lowStockBadge" style="display:none;"></span></button>
   </div>
   <div id="stockView">
     <div class="panel">
@@ -747,6 +750,9 @@
       <button id="menuCatalog"><svg class="icon"><use href="#i-book"/></svg> Catalogue</button>
       <button id="menuLocations"><svg class="icon"><use href="#i-pin"/></svg> Emplacements</button>
       <button id="menuHistory"><svg class="icon"><use href="#i-clock"/></svg> Historique</button>
+      <button id="menuStockCorrect"><svg class="icon"><use href="#i-refresh"/></svg> Corriger le stock</button>
+      <button id="menuStockThreshold"><svg class="icon"><use href="#i-alert"/></svg> Seuil d'alerte stock bas</button>
+      <button id="menuStockExport"><svg class="icon"><use href="#i-file"/></svg> Exporter le stock (CSV)</button>
       <button id="menuTheme"><svg class="icon"><use href="#i-theme"/></svg> Thème</button>
       <button id="menuLock"><svg class="icon"><use href="#i-power"/></svg> Verrouiller</button>
     </div>
@@ -859,6 +865,8 @@
   var STOCK_KEY = 'scanette_stock_v1';
   var ANOMALIES_KEY = 'scanette_anomalies_v1';
   var MOVEMENTS_KEY = 'scanette_movements_v1';
+  var LOW_STOCK_THRESHOLD_KEY = 'scanette_low_stock_threshold_v1';
+  var CORRECTION_PIN_KEY = 'scanette_correction_pin_v1';
   var PREP_SESSION_KEY = 'scanette_prep_session_v1';
   var PIN_KEY = 'scanette_pin_v1';
   var THEME_KEY = 'scanette_theme_v1';
@@ -875,6 +883,7 @@
   var stock = loadStock();
   var anomalies = loadAnomalies(); // retraits qui ont fait passer un stock sous 0, à vérifier chaque jour
   var stockMovements = loadStockMovements(); // journal de toutes les entrées/sorties de stock, partagé avec l'équipe
+  var lowStockThreshold = loadLowStockThreshold(); // en-dessous (ou égal), une référence apparaît en alerte "stock bas"
   var prepSession = loadPrepSession(); // ce qui a été prélevé sur CET appareil depuis le dernier "Vider" de la session prépa
   var history = loadHistory(); // sauvegardes automatiques créées à chaque "Vider"
   var selected = new Set();
@@ -1015,6 +1024,16 @@
   }
   function saveStockMovements(){
     try{ localStorage.setItem(MOVEMENTS_KEY, JSON.stringify(stockMovements)); }catch(e){}
+  }
+  function loadLowStockThreshold(){
+    try{
+      var raw = localStorage.getItem(LOW_STOCK_THRESHOLD_KEY);
+      if(raw !== null){ var n = parseInt(raw, 10); if(!isNaN(n) && n >= 0) return n; }
+    }catch(e){}
+    return 3;
+  }
+  function saveLowStockThreshold(){
+    try{ localStorage.setItem(LOW_STOCK_THRESHOLD_KEY, String(lowStockThreshold)); }catch(e){}
   }
   function loadPrepSession(){
     try{
@@ -1252,6 +1271,7 @@
         if(stock[row.ref] !== row.qty){ stock[row.ref] = row.qty; changed = true; }
       });
       if(changed) saveStock();
+      renderLowStockBadge();
     }catch(e){ console.error(e); return; }
 
     db.channel('stock-changes')
@@ -1260,6 +1280,7 @@
         if(!row || !row.ref) return;
         stock[row.ref] = payload.eventType === 'DELETE' ? 0 : row.qty;
         saveStock();
+        renderLowStockBadge();
         renderGroups();
         if(isPrepViewOpen()) renderPrepSession();
       })
@@ -1275,6 +1296,7 @@
     ref = normalizeRef(ref);
     stock[ref] = (stock[ref] || 0) + delta;
     saveStock();
+    renderLowStockBadge();
     logStockMovement(ref, delta, stock[ref], type || 'reception');
     if(!db) return;
     db.rpc('increment_stock', { p_ref: String(ref), p_delta: delta })
@@ -3303,30 +3325,61 @@
   /* ================= Stock — journal des mouvements ================= */
   var ledgerFilterText = '';
   var LEDGER_MOVEMENTS_MAX_ROWS = 150;
+  var MOVEMENT_TYPE_LABELS = { reception: 'Réception', prep: 'Préparation', correction: 'Correction' };
+  function lowStockRefs(){
+    return Object.keys(stock)
+      .filter(function(r){ return stock[r] <= lowStockThreshold; })
+      .sort(function(a, b){ return stock[a] - stock[b]; });
+  }
+  function renderLowStockBadge(){
+    var el = document.getElementById('lowStockBadge');
+    el.style.display = lowStockRefs().length > 0 ? '' : 'none';
+    if(isLedgerViewOpen() && !ledgerFilterText.trim()) renderLedgerSearch();
+  }
+  function renderStockQtyCard(ref){
+    var qty = stock[ref] || 0;
+    var name = catalog[ref] || '';
+    var cls = qty < 0 ? ' negative' : (qty <= lowStockThreshold ? ' low' : '');
+    var html = '<div class="panel stock-qty-card" data-ref="' + escapeHtml(ref) + '">';
+    html += '<div><div class="ref">' + refBreakHtml(ref) + '</div>';
+    if(name) html += '<div class="sub" style="margin-top:2px;">' + escapeHtml(name) + '</div>';
+    html += '</div>';
+    html += '<div class="qty' + cls + '">' + qty + '</div>';
+    html += '</div>';
+    return html;
+  }
+  function renderLowStockSummary(wrap){
+    var list = lowStockRefs();
+    var html = '<div class="panel" style="display:flex; align-items:center; justify-content:space-between; gap:10px;">';
+    if(list.length > 0){
+      html += '<b style="font-size:13px; color:var(--danger);">⚠ ' + list.length + ' référence(s) en alerte (≤ ' + lowStockThreshold + ')</b>';
+    } else {
+      html += '<b style="font-size:13px;">Aucune alerte de stock bas (seuil : ' + lowStockThreshold + ')</b>';
+    }
+    html += '</div>';
+    if(list.length > 0) html += list.map(renderStockQtyCard).join('');
+    wrap.innerHTML = html;
+  }
   function renderLedgerSearch(){
     var wrap = document.getElementById('ledgerStockResult');
     var q = ledgerFilterText.trim().toUpperCase();
-    if(!q){ wrap.innerHTML = ''; return; }
-    var refs = Object.keys(stock).filter(function(r){ return r.toUpperCase().indexOf(q) !== -1; });
+    if(!q){ renderLowStockSummary(wrap); return; }
+    var allRefs = {};
+    Object.keys(stock).forEach(function(r){ allRefs[r] = true; });
+    Object.keys(catalog).forEach(function(r){ allRefs[r] = true; });
+    var refs = Object.keys(allRefs).filter(function(r){ return r.toUpperCase().indexOf(q) !== -1; });
     refs.sort(naturalCompare);
     if(refs.length > 12) refs = refs.slice(0, 12);
     if(refs.length === 0){
-      wrap.innerHTML = '<div class="panel empty-state"><p>Aucune référence en stock ne correspond.</p></div>';
+      wrap.innerHTML = '<div class="panel empty-state"><p>Aucune référence ne correspond.</p></div>';
       return;
     }
-    var html = '';
-    refs.forEach(function(ref){
-      var qty = stock[ref] || 0;
-      var name = catalog[ref] || '';
-      html += '<div class="panel stock-qty-card">';
-      html += '<div><div class="ref">' + refBreakHtml(ref) + '</div>';
-      if(name) html += '<div class="sub" style="margin-top:2px;">' + escapeHtml(name) + '</div>';
-      html += '</div>';
-      html += '<div class="qty' + (qty < 0 ? ' negative' : '') + '">' + qty + '</div>';
-      html += '</div>';
-    });
-    wrap.innerHTML = html;
+    wrap.innerHTML = refs.map(renderStockQtyCard).join('');
   }
+  document.getElementById('ledgerStockResult').addEventListener('click', function(e){
+    var card = e.target.closest('.stock-qty-card'); if(!card) return;
+    startStockCorrection(card.getAttribute('data-ref'));
+  });
   function renderLedgerMovements(){
     var wrap = document.getElementById('ledgerMovementsList');
     var q = ledgerFilterText.trim().toUpperCase();
@@ -3344,7 +3397,7 @@
       html += '<div class="move-delta ' + (isIn ? 'in' : 'out') + '">' + (isIn ? '+' : '') + m.delta + '</div>';
       html += '<div class="move-info">';
       html += '<div class="move-ref">' + refBreakHtml(m.ref) + '</div>';
-      html += '<div class="move-meta">' + formatHistoryDate(m.at) + ' · ' + escapeHtml(m.by || 'Inconnu') + ' · ' + (m.type === 'prep' ? 'Préparation' : 'Réception') + ' · reste ' + m.qty_after + '</div>';
+      html += '<div class="move-meta">' + formatHistoryDate(m.at) + ' · ' + escapeHtml(m.by || 'Inconnu') + ' · ' + (MOVEMENT_TYPE_LABELS[m.type] || m.type) + ' · reste ' + m.qty_after + '</div>';
       html += '</div></div>';
     });
     html += '</div>';
@@ -3355,6 +3408,79 @@
     ledgerFilterText = this.value;
     renderLedgerSearch();
     renderLedgerMovements();
+  });
+
+  /* ================= Correction manuelle de stock (protégée par code) ================= */
+  function askCorrectionPin(){
+    var stored = null;
+    try{ stored = localStorage.getItem(CORRECTION_PIN_KEY); }catch(e){}
+    if(!stored){
+      return askInput('Crée un code d\'accès pour les corrections de stock', '', 'numeric').then(function(code1){
+        if(!code1) return false;
+        return askInput('Confirme le code', '', 'numeric').then(function(code2){
+          if(!code2 || code1 !== code2){ toast('Les codes ne correspondent pas'); return false; }
+          try{ localStorage.setItem(CORRECTION_PIN_KEY, code1); }catch(e){}
+          toast('Code de correction créé');
+          return true;
+        });
+      });
+    }
+    return askInput('Code d\'accès pour corriger le stock', '', 'numeric').then(function(code){
+      if(code !== null && code === stored) return true;
+      if(code !== null) toast('Code incorrect');
+      return false;
+    });
+  }
+  function startStockCorrection(prefillRef){
+    var refPromise = prefillRef
+      ? Promise.resolve(prefillRef)
+      : askInput('Référence à corriger', '', 'text', true).then(function(v){ return normalizeRef(v); });
+    refPromise.then(function(ref){
+      if(!ref) return;
+      askCorrectionPin().then(function(ok){
+        if(!ok) return;
+        var current = stock[ref] || 0;
+        askInput('Nouvelle quantité pour "' + ref + '" (actuellement ' + current + ')', String(current), 'numeric').then(function(val){
+          if(val === null) return;
+          var n = parseInt(val, 10);
+          if(isNaN(n)){ toast('Quantité invalide'); return; }
+          var delta = n - current;
+          if(delta === 0){ toast('Stock déjà à jour'); return; }
+          adjustStock(ref, delta, 'correction');
+          toast('Stock corrigé : ' + ref + ' → ' + n);
+        });
+      });
+    });
+  }
+  document.getElementById('menuStockCorrect').addEventListener('click', function(){
+    closeMoreMenu();
+    startStockCorrection(null);
+  });
+  document.getElementById('menuStockThreshold').addEventListener('click', function(){
+    closeMoreMenu();
+    askInput('Seuil d\'alerte stock bas (pièces)', String(lowStockThreshold), 'numeric').then(function(val){
+      if(val === null) return;
+      var n = parseInt(val, 10);
+      if(isNaN(n) || n < 0){ toast('Valeur invalide'); return; }
+      lowStockThreshold = n;
+      saveLowStockThreshold();
+      renderLowStockBadge();
+      toast('Seuil mis à jour');
+    });
+  });
+  document.getElementById('menuStockExport').addEventListener('click', function(){
+    closeMoreMenu();
+    var refs = Object.keys(stock);
+    if(refs.length === 0){ toast('Aucun stock à exporter'); return; }
+    refs.sort(naturalCompare);
+    var lines = [csvRow(['Référence', 'Désignation', 'Quantité', 'Statut'])];
+    refs.forEach(function(ref){
+      var qty = stock[ref];
+      var status = qty < 0 ? 'Négatif' : (qty <= lowStockThreshold ? 'Bas' : 'OK');
+      lines.push(csvRow([ref, catalog[ref] || '', qty, status]));
+    });
+    var blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv' });
+    downloadFile('stock_' + new Date().toISOString().slice(0, 10) + '.csv', blob);
   });
 
   /* ================= Historique ================= */
@@ -3453,6 +3579,7 @@
   renderSortToggle();
   renderUserName();
   renderAnomalyBadge();
+  renderLowStockBadge();
   showLockStep();
   initSharedCatalog();
 })();
