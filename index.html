@@ -574,9 +574,9 @@
         <p><b>Stock</b> : un total permanent par référence, partagé avec toute l'équipe, séparé de la feuille de réception (qui reste juste un compteur qu'on vide). La réception l'alimente automatiquement. <b>Préparation de commande</b> (bouton sous le scan) : scanner une pièce prélevée la retire directement de ce stock, même sans fournisseur ni feuille. Si ça tombe sous 0, c'est autorisé mais enregistré dans les <b>Anomalies</b> (bouton dans la page Préparation) pour vérification et correction plus tard.</p>
         <p><b>Historique</b> : chaque "Vider" garde une sauvegarde datée, consultable, exportable en CSV, ou restaurable sur la feuille en cours.</p>
         <p><b>Rotation des références</b> (menu •••) : classe les références par quantité totale sortie en Préparation, pour repérer ce qui part vite (ou pas du tout).</p>
-        <p><b>Inventaire annuel</b> (menu •••) : compte physiquement chaque référence (scan ou saisie manuelle), puis "Terminer l'inventaire" affiche les écarts avec le stock système et permet de les corriger en un clic (code de correction requis).</p>
+        <p><b>Inventaire annuel</b> (menu •••) : scanne d'abord le code-barres d'un rayon — impossible de compter quoi que ce soit avant. Une fois ouvert, il liste tout ce qui doit s'y trouver (via Emplacements) et "Terminer le rayon" reste bloqué tant qu'il en manque. "Voir le rapport global" additionne les rayons terminés et affiche les écarts avec le stock système, exportables ou corrigeables en un clic (code de correction requis).</p>
         <p><b>Prénom</b> : sert à savoir qui a compté quoi (affiché sur les lignes et dans les exports), et à voir qui d'autre a l'app ouverte en même temps. <button id="btnChangeUserName" style="display:inline; background:none; border:none; padding:0; margin:0; font-size:12.5px; font-family:inherit; color:var(--accent); font-weight:700;">Ton prénom : <span id="userNameDisplay">(non défini)</span> — toucher pour changer</button></p>
-        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v63 — 19/09</b></p>
+        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v64 — 19/09</b></p>
       </div>
     </div>
   </div>
@@ -668,24 +668,41 @@
     <button class="btn-secondary" id="btnBackFromInventory" style="margin-top:0; margin-bottom:12px; display:flex; align-items:center; justify-content:center; gap:6px;">
       <svg class="icon" style="width:1em;height:1em;"><use href="#i-backspace"/></svg> Retour
     </button>
-    <div class="panel">
-      <h2 style="margin:0 0 4px; font-size:16px;">Inventaire annuel</h2>
-      <p class="sub" style="margin:0 0 14px;">Compte chaque référence physiquement : scanne ou tape la référence, indique la quantité trouvée. À la fin, un rapport compare avec le stock système.</p>
-      <div class="scan-row">
-        <button class="btn-scan" id="btnInventoryScan"><svg class="icon icon-fill"><use href="#i-play"/></svg>&nbsp;SCANNER POUR COMPTER</button>
+
+    <div id="inventoryShelfPicker">
+      <div class="panel">
+        <h2 style="margin:0 0 4px; font-size:16px;">Inventaire annuel</h2>
+        <p class="sub" style="margin:0 0 14px;">Scanne le code-barres du rayon avant de pouvoir compter quoi que ce soit dedans — impossible de compter hors d'un rayon ouvert.</p>
+        <div class="scan-row">
+          <button class="btn-scan" id="btnInventoryScanShelf"><svg class="icon icon-fill"><use href="#i-play"/></svg>&nbsp;SCANNER UN RAYON</button>
+        </div>
+        <button class="btn-secondary" id="btnInventoryManualShelf" style="margin-top:10px;">Taper le code du rayon</button>
+        <button class="btn-secondary" id="btnInventoryUnassigned" style="margin-top:10px;">Références sans emplacement</button>
       </div>
-      <button class="btn-secondary" id="btnInventoryManualRef" style="margin-top:10px;">Taper la référence à la main</button>
+      <div class="panel">
+        <b style="font-size:13px;">Progression</b>
+        <p class="sub" id="inventoryGlobalProgress" style="margin:4px 0 0;"></p>
+      </div>
+      <div id="inventoryShelvesList"></div>
+      <button class="btn-primary" id="btnOpenInventoryReport">Voir le rapport global</button>
+      <button class="btn-secondary" id="btnResetInventory" style="margin-bottom:20px;">Réinitialiser l'inventaire</button>
     </div>
 
-    <div class="panel">
-      <div class="help-toggle" id="inventorySessionToggle">
-        <b style="font-size:13px;">Compté dans cette session</b>
-        <button class="row-icon-btn" id="btnClearInventorySession" title="Vider la session">Vider</button>
+    <div id="inventoryShelfActive" style="display:none;">
+      <button class="btn-secondary" id="btnLeaveShelfWithoutFinishing" style="margin-top:0; margin-bottom:12px; display:flex; align-items:center; justify-content:center; gap:6px;">
+        <svg class="icon" style="width:1em;height:1em;"><use href="#i-backspace"/></svg> Quitter sans terminer (garde la progression)
+      </button>
+      <div class="panel">
+        <h2 id="inventoryShelfTitle" style="margin:0 0 4px; font-size:16px;"></h2>
+        <p class="sub" id="inventoryShelfProgress" style="margin:0 0 14px;"></p>
+        <div class="scan-row">
+          <button class="btn-scan" id="btnInventoryScan"><svg class="icon icon-fill"><use href="#i-play"/></svg>&nbsp;SCANNER POUR COMPTER</button>
+        </div>
+        <button class="btn-secondary" id="btnInventoryManualRef" style="margin-top:10px;">Taper la référence à la main</button>
       </div>
-      <div id="inventorySessionList"><p class="sub" style="margin:8px 0 0;">Rien de compté pour l'instant.</p></div>
+      <div id="inventoryShelfRefList"></div>
+      <button class="btn-primary" id="btnFinishShelf" style="margin-bottom:20px;" disabled>Terminer le rayon</button>
     </div>
-
-    <button class="btn-primary" id="btnFinishInventory" style="margin-bottom:20px;">Terminer l'inventaire</button>
   </div>
 
   <div id="ledgerView" style="display:none;">
@@ -925,7 +942,7 @@
   var LOW_STOCK_THRESHOLD_KEY = 'scanette_low_stock_threshold_v1';
   var CORRECTION_PIN_KEY = 'scanette_correction_pin_v1';
   var PREP_SESSION_KEY = 'scanette_prep_session_v1';
-  var INVENTORY_SESSION_KEY = 'scanette_inventory_session_v1';
+  var INVENTORY_SHELVES_KEY = 'scanette_inventory_shelves_v1';
   var PIN_KEY = 'scanette_pin_v1';
   var THEME_KEY = 'scanette_theme_v1';
   var SORT_KEY = 'scanette_sort_v1';
@@ -943,7 +960,7 @@
   var stockMovements = loadStockMovements(); // journal de toutes les entrées/sorties de stock, partagé avec l'équipe
   var lowStockThreshold = loadLowStockThreshold(); // en-dessous (ou égal), une référence apparaît en alerte "stock bas"
   var prepSession = loadPrepSession(); // ce qui a été prélevé sur CET appareil depuis le dernier "Vider" de la session prépa
-  var inventorySession = loadInventorySession(); // [{ref, counted, system, at}] — comptage physique en cours sur CET appareil, local jusqu'à "Terminer l'inventaire"
+  var inventoryShelves = loadInventoryShelves(); // { [shelfCode]: { by, startedAt, finishedAt, finishedBy, counts: {ref: qty} } } — local à cet appareil
   var history = loadHistory(); // sauvegardes automatiques créées à chaque "Vider"
   var selected = new Set();
   var listFilterText = '';
@@ -1104,15 +1121,15 @@
   function savePrepSession(){
     try{ localStorage.setItem(PREP_SESSION_KEY, JSON.stringify(prepSession)); }catch(e){}
   }
-  function loadInventorySession(){
+  function loadInventoryShelves(){
     try{
-      var raw = localStorage.getItem(INVENTORY_SESSION_KEY);
+      var raw = localStorage.getItem(INVENTORY_SHELVES_KEY);
       if(raw) return JSON.parse(raw);
     }catch(e){}
-    return [];
+    return {};
   }
-  function saveInventorySession(){
-    try{ localStorage.setItem(INVENTORY_SESSION_KEY, JSON.stringify(inventorySession)); }catch(e){}
+  function saveInventoryShelves(){
+    try{ localStorage.setItem(INVENTORY_SHELVES_KEY, JSON.stringify(inventoryShelves)); }catch(e){}
   }
   function loadHistory(){
     try{
@@ -2295,6 +2312,7 @@
     beep();
     if(scanPurpose === 'prep') handlePrepScannedCode(code);
     else if(scanPurpose === 'inventory') handleInventoryScannedCode(code);
+    else if(scanPurpose === 'inventory-shelf') handleInventoryShelfScannedCode(code);
     else handleScannedCode(code);
   }
 
@@ -2337,6 +2355,7 @@
       beep();
       if(scanPurpose === 'prep') handlePrepScannedCode(code);
       else if(scanPurpose === 'inventory') handleInventoryScannedCode(code);
+      else if(scanPurpose === 'inventory-shelf') handleInventoryShelfScannedCode(code);
       else handleScannedCode(code);
     });
   });
@@ -3202,7 +3221,8 @@
     $inventoryView.style.display = 'block';
     document.getElementById('modeTabs').style.display = 'none';
     document.querySelector('.toolbar').style.display = 'none';
-    renderInventorySession();
+    activeInventoryShelf = null;
+    showInventoryShelfPickerState();
     window.scrollTo(0, 0);
   }
   document.getElementById('menuInventory').addEventListener('click', function(){ closeMoreMenu(); showInventoryView(); });
@@ -3504,15 +3524,141 @@
     renderAnomaliesList();
   });
 
-  /* ================= Inventaire annuel (comptage physique vs stock système) ================= */
-  // Comptage local à cet appareil (comme la session de préparation) : on
-  // scanne/tape chaque référence trouvée avec sa quantité réelle, un même
-  // ref recompté remplace la valeur précédente. "system" garde la valeur du
-  // stock au moment du comptage — sert juste d'indication dans la liste ;
-  // au moment d'appliquer les corrections, on recompare toujours avec la
-  // valeur ACTUELLE du stock (pas ce snapshot), pour ne pas écraser une
-  // réception ou un retrait légitime survenu entre-temps.
+  /* ================= Inventaire annuel (comptage rayon par rayon, verrouillé) ================= */
+  // On ne peut RIEN compter tant qu'un rayon n'est pas ouvert (scan du
+  // code-barres du rayon, ou saisie manuelle du code). Une fois ouvert, le
+  // rayon liste tout ce qui est censé s'y trouver (via Emplacements) et le
+  // bouton "Terminer le rayon" reste désactivé tant qu'il en manque — pas
+  // moyen de clôturer un rayon à moitié compté. "Références sans
+  // emplacement" est un rayon spécial sans liste attendue, jamais bloqué.
+  // Chaque rayon garde qui l'a terminé et quand — comptage 100% local à cet
+  // appareil (pas synchronisé), donc deux personnes doivent compter deux
+  // rayons différents plutôt que le même en même temps.
+  var INVENTORY_UNASSIGNED_KEY = '__sans_emplacement__';
+  var activeInventoryShelf = null;
+  function allShelfCodes(){
+    var set = {};
+    Object.keys(locations).forEach(function(r){ (locations[r] || []).forEach(function(c){ set[c] = true; }); });
+    return Object.keys(set).sort(naturalCompare);
+  }
+  function shelfExpectedRefs(shelfCode){
+    return Object.keys(locations).filter(function(r){ return (locations[r] || []).indexOf(shelfCode) !== -1; }).sort(naturalCompare);
+  }
+  function showInventoryShelfPickerState(){
+    document.getElementById('inventoryShelfActive').style.display = 'none';
+    document.getElementById('inventoryShelfPicker').style.display = 'block';
+    renderInventoryShelvesList();
+  }
+  function showInventoryShelfActiveState(){
+    document.getElementById('inventoryShelfPicker').style.display = 'none';
+    document.getElementById('inventoryShelfActive').style.display = 'block';
+    renderActiveShelf();
+  }
+  function enterShelf(code){
+    code = String(code || '').trim().toLowerCase();
+    if(!code) return;
+    if(!inventoryShelves[code]) inventoryShelves[code] = { by: currentUser || null, startedAt: new Date().toISOString(), finishedAt: null, finishedBy: null, counts: {} };
+    activeInventoryShelf = code;
+    saveInventoryShelves();
+    showInventoryShelfActiveState();
+  }
+  function tryEnterShelf(code){
+    code = String(code || '').trim().toLowerCase();
+    if(!code) return;
+    if(code !== INVENTORY_UNASSIGNED_KEY && shelfExpectedRefs(code).length === 0 && !inventoryShelves[code]){
+      openConfirm('Rayon inconnu', 'Aucune référence n\'est enregistrée dans "' + code + '" (Emplacements). Ouvrir quand même ?', function(){ enterShelf(code); });
+      return;
+    }
+    enterShelf(code);
+  }
+  function handleInventoryShelfScannedCode(code){
+    var shelfCode = String(code || '').trim().toLowerCase();
+    if(!shelfCode) return;
+    flashScan(true);
+    stopScan();
+    tryEnterShelf(shelfCode);
+  }
+  document.getElementById('btnInventoryScanShelf').addEventListener('click', function(){ scanPurpose = 'inventory-shelf'; startScan(); });
+  document.getElementById('btnInventoryManualShelf').addEventListener('click', function(){
+    askInput('Code du rayon (ex. a1b)', '', 'text').then(function(val){
+      val = String(val || '').trim().toLowerCase();
+      if(!val) return;
+      tryEnterShelf(val);
+    });
+  });
+  document.getElementById('btnInventoryUnassigned').addEventListener('click', function(){
+    enterShelf(INVENTORY_UNASSIGNED_KEY);
+  });
+  document.getElementById('btnLeaveShelfWithoutFinishing').addEventListener('click', function(){
+    activeInventoryShelf = null;
+    showInventoryShelfPickerState();
+  });
+  document.getElementById('inventoryShelvesList').addEventListener('click', function(e){
+    var btn = e.target.closest('[data-role="resumeShelf"]'); if(!btn) return;
+    enterShelf(btn.getAttribute('data-shelf'));
+  });
+  function renderInventoryShelvesList(){
+    var codes = Object.keys(inventoryShelves).filter(function(c){ return c !== INVENTORY_UNASSIGNED_KEY; });
+    codes.sort(naturalCompare);
+    var known = allShelfCodes();
+    var finishedKnown = known.filter(function(c){ return inventoryShelves[c] && inventoryShelves[c].finishedAt; });
+    document.getElementById('inventoryGlobalProgress').textContent = known.length
+      ? (finishedKnown.length + ' / ' + known.length + ' rayon(s) connus terminés.')
+      : 'Aucun rayon enregistré dans Emplacements pour l\'instant.';
+    var wrap = document.getElementById('inventoryShelvesList');
+    if(codes.length === 0 && !inventoryShelves[INVENTORY_UNASSIGNED_KEY]){
+      wrap.innerHTML = '';
+      return;
+    }
+    var html = '<div class="panel"><b style="font-size:13px;">Rayons commencés</b></div>';
+    codes.forEach(function(c){
+      var e = inventoryShelves[c];
+      var expected = shelfExpectedRefs(c);
+      var done = expected.filter(function(r){ return e.counts.hasOwnProperty(r); }).length;
+      var status = e.finishedAt ? ('✓ terminé ' + formatHistoryDate(e.finishedAt) + ' par ' + escapeHtml(e.finishedBy || '?')) : (done + ' / ' + expected.length + ' comptée(s)');
+      html += '<div class="catalog-row" data-shelf="' + escapeHtml(c) + '"><div class="ref-wrap"><div class="ref">Rayon ' + escapeHtml(c) + '</div><div class="sub" style="margin-top:2px;">' + status + '</div></div><button class="row-icon-btn" data-role="resumeShelf" data-shelf="' + escapeHtml(c) + '">Ouvrir</button></div>';
+    });
+    if(inventoryShelves[INVENTORY_UNASSIGNED_KEY]){
+      var eu = inventoryShelves[INVENTORY_UNASSIGNED_KEY];
+      html += '<div class="catalog-row" data-shelf="' + INVENTORY_UNASSIGNED_KEY + '"><div class="ref-wrap"><div class="ref">Sans emplacement</div><div class="sub" style="margin-top:2px;">' + Object.keys(eu.counts).length + ' référence(s) comptée(s)' + (eu.finishedAt ? ' · terminé' : '') + '</div></div><button class="row-icon-btn" data-role="resumeShelf" data-shelf="' + INVENTORY_UNASSIGNED_KEY + '">Ouvrir</button></div>';
+    }
+    wrap.innerHTML = html;
+  }
+  function renderActiveShelf(){
+    var code = activeInventoryShelf;
+    var entry = inventoryShelves[code];
+    var isUnassigned = code === INVENTORY_UNASSIGNED_KEY;
+    document.getElementById('inventoryShelfTitle').textContent = isUnassigned ? 'Références sans emplacement' : ('Rayon ' + code);
+    var expected = isUnassigned ? [] : shelfExpectedRefs(code);
+    var countedRefs = Object.keys(entry.counts);
+    var doneCount = expected.filter(function(r){ return entry.counts.hasOwnProperty(r); }).length;
+    var extra = countedRefs.filter(function(r){ return expected.indexOf(r) === -1; });
+    var progress = isUnassigned
+      ? (countedRefs.length + ' référence(s) comptée(s) ici.')
+      : (doneCount + ' / ' + expected.length + ' référence(s) attendue(s) comptée(s)' + (extra.length ? ' · ' + extra.length + ' hors liste' : '') + (entry.finishedAt ? ' · terminé ' + formatHistoryDate(entry.finishedAt) + ' par ' + (entry.finishedBy || '?') : ''));
+    document.getElementById('inventoryShelfProgress').textContent = progress;
+    var html = '';
+    expected.forEach(function(ref){
+      var has = entry.counts.hasOwnProperty(ref);
+      html += '<div class="prep-session-row"><span class="ref">' + refBreakHtml(ref) + '</span><span style="font-family:var(--font-mono); font-weight:800; color:' + (has ? 'var(--text-dim)' : 'var(--danger)') + ';">' + (has ? ('compté ' + entry.counts[ref]) : 'à compter') + '</span></div>';
+    });
+    extra.forEach(function(ref){
+      html += '<div class="prep-session-row"><span class="ref">' + refBreakHtml(ref) + ' ⚠ hors liste</span><span style="font-family:var(--font-mono); font-weight:800; color:var(--text-dim);">compté ' + entry.counts[ref] + '</span></div>';
+    });
+    if(!html) html = '<p class="sub" style="margin:8px 0 0;">' + (isUnassigned ? 'Rien de compté pour l\'instant.' : 'Aucune référence connue dans ce rayon — scanne ce que tu trouves quand même.') + '</p>';
+    document.getElementById('inventoryShelfRefList').innerHTML = html;
+    var finishBtn = document.getElementById('btnFinishShelf');
+    if(isUnassigned){
+      finishBtn.disabled = false;
+      finishBtn.textContent = 'Terminer';
+    } else {
+      var canFinish = doneCount === expected.length;
+      finishBtn.disabled = !canFinish;
+      finishBtn.textContent = canFinish ? 'Terminer le rayon' : ('Terminer le rayon (' + (expected.length - doneCount) + ' restante(s))');
+    }
+  }
   function handleInventoryScannedCode(code){
+    if(!activeInventoryShelf){ toast('Ouvre un rayon avant de compter'); return; }
     var refName = catalog[code];
     pauseScanning();
     if(!refName){
@@ -3529,86 +3675,85 @@
   }
   function promptInventoryCount(ref){
     ref = normalizeRef(ref);
-    if(!ref){ resumeScanning(); return; }
-    var current = stock[ref] || 0;
-    askInput('Quantité comptée pour "' + ref + '" (système : ' + current + ')', String(current), 'numeric').then(function(val){
+    if(!ref || !activeInventoryShelf){ resumeScanning(); return; }
+    var entry = inventoryShelves[activeInventoryShelf];
+    var existing = entry.counts.hasOwnProperty(ref) ? String(entry.counts[ref]) : '';
+    askInput('Quantité comptée pour "' + ref + '" dans ce rayon', existing, 'numeric').then(function(val){
       resumeScanning();
       if(val === null) return;
       var n = parseInt(val, 10);
       if(isNaN(n) || n < 0){ toast('Quantité invalide'); return; }
-      recordInventoryCount(ref, n);
+      recordShelfCount(ref, n);
     });
   }
-  function recordInventoryCount(ref, countedQty){
-    var systemQty = stock[ref] || 0;
-    var idx = inventorySession.findIndex(function(e){ return e.ref === ref; });
-    var entry = { ref: ref, counted: countedQty, system: systemQty, at: new Date().toISOString() };
-    if(idx !== -1) inventorySession[idx] = entry; else inventorySession.unshift(entry);
-    saveInventorySession();
-    renderInventorySession();
-    var diff = countedQty - systemQty;
-    toast(ref + '  compté ' + countedQty + (diff !== 0 ? '  (écart ' + (diff >= 0 ? '+' : '') + diff + ')' : '  (OK)'));
-  }
-  function renderInventorySession(){
-    var wrap = document.getElementById('inventorySessionList');
-    if(!wrap) return;
-    if(inventorySession.length === 0){
-      wrap.innerHTML = '<p class="sub" style="margin:8px 0 0;">Rien de compté pour l\'instant.</p>';
-      return;
-    }
-    var html = '';
-    inventorySession.forEach(function(e){
-      var diff = e.counted - e.system;
-      var color = diff === 0 ? 'var(--text-dim)' : (diff > 0 ? 'var(--success)' : 'var(--danger)');
-      html += '<div class="prep-session-row"><span class="ref">' + refBreakHtml(e.ref) + '</span><span style="font-family:var(--font-mono); font-weight:800; color:' + color + ';">compté ' + e.counted + ' · système ' + e.system + (diff !== 0 ? ' · écart ' + (diff >= 0 ? '+' : '') + diff : '') + '</span></div>';
-    });
-    wrap.innerHTML = html;
+  function recordShelfCount(ref, qty){
+    if(!activeInventoryShelf) return;
+    inventoryShelves[activeInventoryShelf].counts[ref] = qty;
+    saveInventoryShelves();
+    renderActiveShelf();
+    toast(ref + '  compté ' + qty + ' dans ce rayon');
   }
   document.getElementById('btnInventoryManualRef').addEventListener('click', function(){
+    if(!activeInventoryShelf) return;
     askInput('Référence comptée', '', 'text', true).then(function(val){
       val = normalizeRef(val);
       if(!val) return;
-      var current = stock[val] || 0;
-      askInput('Quantité comptée pour "' + val + '" (système : ' + current + ')', String(current), 'numeric').then(function(qty){
-        if(qty === null) return;
-        var n = parseInt(qty, 10);
-        if(isNaN(n) || n < 0){ toast('Quantité invalide'); return; }
-        recordInventoryCount(val, n);
-      });
+      promptInventoryCount(val);
     });
   });
-  document.getElementById('btnClearInventorySession').addEventListener('click', function(){
-    if(inventorySession.length === 0) return;
-    openConfirm('Vider la session d\'inventaire ?', 'La liste de comptage sur cet appareil sera effacée. Le stock système n\'est pas touché.', function(){
-      inventorySession = [];
-      saveInventorySession();
-      renderInventorySession();
-      toast('Session vidée');
+  document.getElementById('btnFinishShelf').addEventListener('click', function(){
+    if(!activeInventoryShelf) return;
+    var code = activeInventoryShelf;
+    var entry = inventoryShelves[code];
+    if(code !== INVENTORY_UNASSIGNED_KEY){
+      var expected = shelfExpectedRefs(code);
+      var doneCount = expected.filter(function(r){ return entry.counts.hasOwnProperty(r); }).length;
+      if(doneCount < expected.length){ toast('Il reste des références à compter dans ce rayon'); return; }
+    }
+    entry.finishedAt = new Date().toISOString();
+    entry.finishedBy = currentUser || null;
+    saveInventoryShelves();
+    activeInventoryShelf = null;
+    showInventoryShelfPickerState();
+    toast('Rayon terminé');
+  });
+  document.getElementById('btnResetInventory').addEventListener('click', function(){
+    if(Object.keys(inventoryShelves).length === 0){ toast('Rien à réinitialiser'); return; }
+    openConfirm('Réinitialiser l\'inventaire ?', 'Efface tous les rayons comptés sur cet appareil (qui/quand compris). Le stock système n\'est pas touché. À faire avant de démarrer le prochain inventaire annuel.', function(){
+      inventoryShelves = {};
+      saveInventoryShelves();
+      renderInventoryShelvesList();
+      toast('Inventaire réinitialisé');
     });
   });
 
+  // Rapport global : additionne le compté de chaque référence sur tous les
+  // rayons où elle a été trouvée, puis recompare toujours à la valeur
+  // ACTUELLE du stock (pas un instantané pris pendant le comptage), pour ne
+  // pas écraser une réception ou un retrait légitime survenu entre-temps.
   function inventoryReport(){
-    // Toujours recomparé à la valeur ACTUELLE du stock, pas au snapshot pris
-    // pendant le comptage — un scan reçu par quelqu'un d'autre entre-temps ne
-    // doit pas être écrasé par une correction basée sur une valeur périmée.
-    return inventorySession.map(function(e){
-      var currentSystem = stock[e.ref] || 0;
-      return {
-        ref: e.ref,
-        counted: e.counted,
-        systemAtCount: e.system,
-        systemNow: currentSystem,
-        diff: e.counted - currentSystem,
-        movedSinceCount: currentSystem !== e.system
-      };
+    var totals = {};
+    Object.keys(inventoryShelves).forEach(function(shelfCode){
+      var entry = inventoryShelves[shelfCode];
+      Object.keys(entry.counts).forEach(function(ref){
+        if(!totals[ref]) totals[ref] = { ref: ref, counted: 0, shelves: [], anyUnfinished: false };
+        totals[ref].counted += entry.counts[ref];
+        totals[ref].shelves.push(shelfCode === INVENTORY_UNASSIGNED_KEY ? 'hors emplacement' : shelfCode);
+        if(!entry.finishedAt) totals[ref].anyUnfinished = true;
+      });
+    });
+    return Object.keys(totals).map(function(ref){
+      var t = totals[ref];
+      var currentSystem = stock[ref] || 0;
+      return { ref: ref, counted: t.counted, systemNow: currentSystem, diff: t.counted - currentSystem, shelves: t.shelves.join(', '), anyUnfinished: t.anyUnfinished };
     }).sort(function(a, b){ return Math.abs(b.diff) - Math.abs(a.diff); });
   }
   function renderInventoryReport(){
     var report = inventoryReport();
     var withDiff = report.filter(function(r){ return r.diff !== 0; });
-    var moved = report.filter(function(r){ return r.movedSinceCount; });
+    var unfinished = report.filter(function(r){ return r.anyUnfinished; });
     var sub = report.length + ' référence(s) comptée(s), ' + withDiff.length + ' avec écart.';
-    if(moved.length > 0) sub += ' ⚠ ' + moved.length + ' ont bougé côté stock système depuis leur comptage (vérifie avant d\'appliquer).';
+    if(unfinished.length > 0) sub += ' ⚠ ' + unfinished.length + ' incluent un rayon pas encore terminé (le total peut encore bouger).';
     document.getElementById('inventoryReportSub').textContent = sub;
     var wrap = document.getElementById('inventoryReportList');
     if(report.length === 0){
@@ -3618,12 +3763,13 @@
     var html = '';
     report.forEach(function(r){
       var color = r.diff === 0 ? 'var(--text-dim)' : (r.diff > 0 ? 'var(--success)' : 'var(--danger)');
-      html += '<div class="prep-session-row"><span class="ref">' + refBreakHtml(r.ref) + (r.movedSinceCount ? ' ⚠' : '') + '</span><span style="font-family:var(--font-mono); font-weight:800; color:' + color + ';">compté ' + r.counted + ' · système ' + r.systemNow + (r.diff !== 0 ? ' · écart ' + (r.diff >= 0 ? '+' : '') + r.diff : ' · OK') + '</span></div>';
+      html += '<div class="prep-session-row"><span class="ref">' + refBreakHtml(r.ref) + (r.anyUnfinished ? ' ⚠' : '') + '</span><span style="font-family:var(--font-mono); font-weight:800; color:' + color + ';">compté ' + r.counted + ' (' + escapeHtml(r.shelves) + ') · système ' + r.systemNow + (r.diff !== 0 ? ' · écart ' + (r.diff >= 0 ? '+' : '') + r.diff : ' · OK') + '</span></div>';
     });
     wrap.innerHTML = html;
   }
-  document.getElementById('btnFinishInventory').addEventListener('click', function(){
-    if(inventorySession.length === 0){ toast('Rien de compté pour l\'instant'); return; }
+  document.getElementById('btnOpenInventoryReport').addEventListener('click', function(){
+    var report = inventoryReport();
+    if(report.length === 0){ toast('Rien de compté pour l\'instant'); return; }
     renderInventoryReport();
     document.getElementById('inventoryReportModal').classList.add('show');
   });
@@ -3636,9 +3782,9 @@
   document.getElementById('btnExportInventoryReport').addEventListener('click', function(){
     var report = inventoryReport();
     if(report.length === 0){ toast('Rien à exporter'); return; }
-    var lines = [csvRow(['Référence', 'Désignation', 'Compté', 'Système (actuel)', 'Écart', 'A bougé pendant le comptage'])];
+    var lines = [csvRow(['Référence', 'Désignation', 'Compté', 'Rayon(s)', 'Système (actuel)', 'Écart', 'Rayon non terminé'])];
     report.forEach(function(r){
-      lines.push(csvRow([r.ref, catalog[r.ref] || '', r.counted, r.systemNow, r.diff, r.movedSinceCount ? 'Oui' : 'Non']));
+      lines.push(csvRow([r.ref, catalog[r.ref] || '', r.counted, r.shelves, r.systemNow, r.diff, r.anyUnfinished ? 'Oui' : 'Non']));
     });
     var blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv' });
     downloadFile('inventaire_' + new Date().toISOString().slice(0, 10) + '.csv', blob);
@@ -3650,7 +3796,7 @@
       if(!ok) return;
       openConfirm(
         'Appliquer ' + report.length + ' correction(s) ?',
-        'Le stock système sera ajusté pour correspondre au comptage, référence par référence.',
+        'Le stock système sera ajusté pour correspondre au comptage, référence par référence. L\'historique des rayons comptés est conservé (menu Inventaire) jusqu\'à réinitialisation.',
         function(){
           report.forEach(function(r){
             var freshCurrent = stock[r.ref] || 0;
@@ -3659,9 +3805,6 @@
           });
           toast('Corrections appliquées');
           document.getElementById('inventoryReportModal').classList.remove('show');
-          inventorySession = [];
-          saveInventorySession();
-          renderInventorySession();
         }
       );
     });
