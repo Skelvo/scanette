@@ -574,7 +574,7 @@
         <p><b>Stock</b> : un total permanent par référence, partagé avec toute l'équipe, séparé de la feuille de réception (qui reste juste un compteur qu'on vide). La réception l'alimente automatiquement. <b>Préparation de commande</b> (bouton sous le scan) : scanner une pièce prélevée la retire directement de ce stock, même sans fournisseur ni feuille. Si ça tombe sous 0, c'est autorisé mais enregistré dans les <b>Anomalies</b> (bouton dans la page Préparation) pour vérification et correction plus tard.</p>
         <p><b>Historique</b> : chaque "Vider" garde une sauvegarde datée, consultable, exportable en CSV, ou restaurable sur la feuille en cours.</p>
         <p><b>Prénom</b> : sert à savoir qui a compté quoi (affiché sur les lignes et dans les exports), et à voir qui d'autre a l'app ouverte en même temps. <button id="btnChangeUserName" style="display:inline; background:none; border:none; padding:0; margin:0; font-size:12.5px; font-family:inherit; color:var(--accent); font-weight:700;">Ton prénom : <span id="userNameDisplay">(non défini)</span> — toucher pour changer</button></p>
-        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v58 — 19/09</b></p>
+        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v59 — 19/09</b></p>
       </div>
     </div>
   </div>
@@ -1330,6 +1330,28 @@
     logStockMovement(ref, delta, stock[ref], type || 'reception');
     if(!db) return;
     db.rpc('increment_stock', { p_ref: String(ref), p_delta: delta })
+      .then(function(res){ if(res.error) console.error(res.error); });
+  }
+  // Déplace le stock accumulé d'une référence vers son nouveau nom (renommage
+  // depuis la feuille) — additionné à ce qu'il y a déjà sous le nouveau nom
+  // plutôt que de l'écraser. Un seul appel RPC côté serveur (transaction),
+  // pour éviter qu'une coupure réseau entre deux appels séparés ne perde ou
+  // ne duplique la quantité.
+  function renameStockRef(oldRef, newRef){
+    oldRef = normalizeRef(oldRef); newRef = normalizeRef(newRef);
+    if(!oldRef || !newRef || oldRef === newRef) return;
+    var qty = stock[oldRef] || 0;
+    if(!qty) return;
+    var newAfter = (stock[newRef] || 0) + qty;
+    stock[newRef] = newAfter;
+    stock[oldRef] = 0;
+    saveStock();
+    renderLowStockBadge();
+    logStockMovement(oldRef, -qty, 0, 'renommage');
+    logStockMovement(newRef, qty, newAfter, 'renommage');
+    toast('Stock déplacé : ' + oldRef + ' → ' + newRef + ' (total ' + newAfter + ')');
+    if(!db) return;
+    db.rpc('rename_stock_ref', { p_old: String(oldRef), p_new: String(newRef) })
       .then(function(res){ if(res.error) console.error(res.error); });
   }
 
@@ -2458,12 +2480,14 @@
       askInput('Renommer la référence', item.ref, 'text', true).then(function(val){
         val = normalizeRef(val);
         if(val === null || !val) return;
+        var oldRef = item.ref;
         item.ref = val;
         // Un article peut avoir plusieurs codes-barres (lots différents,
         // même pièce) : le renommage doit mettre à jour le catalogue pour
         // chacun d'eux, pas juste le premier.
         itemCodes(item).forEach(function(c){ catalog[c] = val; writeCatalogEntry(c, val); });
         saveCatalog();
+        if(oldRef !== val) renameStockRef(oldRef, val);
         saveState(); renderAll();
       });
       return;
@@ -3385,7 +3409,7 @@
   /* ================= Stock — journal des mouvements ================= */
   var ledgerFilterText = '';
   var LEDGER_MOVEMENTS_MAX_ROWS = 150;
-  var MOVEMENT_TYPE_LABELS = { reception: 'Réception', prep: 'Préparation', correction: 'Correction', annulation: 'Suppression' };
+  var MOVEMENT_TYPE_LABELS = { reception: 'Réception', prep: 'Préparation', correction: 'Correction', annulation: 'Suppression', renommage: 'Renommage' };
   function lowStockRefs(){
     return Object.keys(stock)
       .filter(function(r){ return stock[r] <= lowStockThreshold; })
