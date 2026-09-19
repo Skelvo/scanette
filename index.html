@@ -510,6 +510,7 @@
     <button class="mode-tab active" id="modeTabStock"><svg class="icon"><use href="#i-inbox"/></svg> Réception</button>
     <button class="mode-tab" id="modeTabPrep"><svg class="icon"><use href="#i-outbox"/></svg> Préparation</button>
     <button class="mode-tab" id="modeTabLedger"><svg class="icon"><use href="#i-clock"/></svg> Stock<span class="tab-badge-dot" id="lowStockBadge" style="display:none;"></span></button>
+    <button class="mode-tab" id="modeTabInventory"><svg class="icon"><use href="#i-refresh"/></svg> Inventaire</button>
   </div>
   <div id="stockView">
     <div class="panel">
@@ -574,9 +575,9 @@
         <p><b>Stock</b> : un total permanent par référence, partagé avec toute l'équipe, séparé de la feuille de réception (qui reste juste un compteur qu'on vide). La réception l'alimente automatiquement. <b>Préparation de commande</b> (bouton sous le scan) : scanner une pièce prélevée la retire directement de ce stock, même sans fournisseur ni feuille. Si ça tombe sous 0, c'est autorisé mais enregistré dans les <b>Anomalies</b> (bouton dans la page Préparation) pour vérification et correction plus tard.</p>
         <p><b>Historique</b> : chaque "Vider" garde une sauvegarde datée, consultable, exportable en CSV, ou restaurable sur la feuille en cours.</p>
         <p><b>Rotation des références</b> (menu •••) : classe les références par quantité totale sortie en Préparation, pour repérer ce qui part vite (ou pas du tout).</p>
-        <p><b>Inventaire annuel</b> (menu •••) : scanne d'abord le code-barres d'un rayon — impossible de compter quoi que ce soit avant. Une fois ouvert, il liste tout ce qui doit s'y trouver (via Emplacements) et "Terminer le rayon" reste bloqué tant qu'il en manque. "Voir le rapport global" additionne les rayons terminés et affiche les écarts avec le stock système, exportables ou corrigeables en un clic (code de correction requis).</p>
+        <p><b>Inventaire annuel</b> (onglet en haut) : scanne d'abord le code-barres d'un rayon — impossible de compter quoi que ce soit avant. Une fois ouvert, il liste tout ce qui doit s'y trouver (via Emplacements) et "Terminer le rayon" reste bloqué tant qu'il en manque. "Voir le rapport global" additionne les rayons terminés et affiche les écarts avec le stock système, exportables ou corrigeables en un clic (code de correction requis).</p>
         <p><b>Prénom</b> : sert à savoir qui a compté quoi (affiché sur les lignes et dans les exports), et à voir qui d'autre a l'app ouverte en même temps. <button id="btnChangeUserName" style="display:inline; background:none; border:none; padding:0; margin:0; font-size:12.5px; font-family:inherit; color:var(--accent); font-weight:700;">Ton prénom : <span id="userNameDisplay">(non défini)</span> — toucher pour changer</button></p>
-        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v64 — 19/09</b></p>
+        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v65 — 19/09</b></p>
       </div>
     </div>
   </div>
@@ -665,10 +666,6 @@
   </div>
 
   <div id="inventoryView" style="display:none;">
-    <button class="btn-secondary" id="btnBackFromInventory" style="margin-top:0; margin-bottom:12px; display:flex; align-items:center; justify-content:center; gap:6px;">
-      <svg class="icon" style="width:1em;height:1em;"><use href="#i-backspace"/></svg> Retour
-    </button>
-
     <div id="inventoryShelfPicker">
       <div class="panel">
         <h2 style="margin:0 0 4px; font-size:16px;">Inventaire annuel</h2>
@@ -803,7 +800,6 @@
       <button id="menuReorderExport"><svg class="icon"><use href="#i-file"/></svg> Liste de réappro (CSV)</button>
       <button id="menuFullBackup"><svg class="icon"><use href="#i-file"/></svg> Sauvegarde complète (JSON)</button>
       <button id="menuRotation"><svg class="icon"><use href="#i-clock"/></svg> Rotation des références</button>
-      <button id="menuInventory"><svg class="icon"><use href="#i-refresh"/></svg> Inventaire annuel</button>
       <button id="menuTheme"><svg class="icon"><use href="#i-theme"/></svg> Thème</button>
       <button id="menuLock"><svg class="icon"><use href="#i-power"/></svg> Verrouiller</button>
     </div>
@@ -3162,6 +3158,7 @@
     document.getElementById('modeTabStock').classList.toggle('active', mode === 'stock');
     document.getElementById('modeTabPrep').classList.toggle('active', mode === 'prep');
     document.getElementById('modeTabLedger').classList.toggle('active', mode === 'ledger');
+    document.getElementById('modeTabInventory').classList.toggle('active', mode === 'inventory');
   }
   function showStockView(){
     $locationsView.style.display = 'none';
@@ -3219,14 +3216,14 @@
     $prepView.style.display = 'none';
     $ledgerView.style.display = 'none';
     $inventoryView.style.display = 'block';
-    document.getElementById('modeTabs').style.display = 'none';
+    document.getElementById('modeTabs').style.display = 'flex';
     document.querySelector('.toolbar').style.display = 'none';
     activeInventoryShelf = null;
     showInventoryShelfPickerState();
     window.scrollTo(0, 0);
+    setModeTab('inventory');
   }
-  document.getElementById('menuInventory').addEventListener('click', function(){ closeMoreMenu(); showInventoryView(); });
-  document.getElementById('btnBackFromInventory').addEventListener('click', showStockView);
+  document.getElementById('modeTabInventory').addEventListener('click', showInventoryView);
 
   /* ================= Menu (regroupe Catalogue / Emplacements / Historique / Thème / Verrouiller) ================= */
   function closeMoreMenu(){ document.getElementById('moreMenuModal').classList.remove('show'); }
