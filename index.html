@@ -574,7 +574,7 @@
         <p><b>Stock</b> : un total permanent par référence, partagé avec toute l'équipe, séparé de la feuille de réception (qui reste juste un compteur qu'on vide). La réception l'alimente automatiquement. <b>Préparation de commande</b> (bouton sous le scan) : scanner une pièce prélevée la retire directement de ce stock, même sans fournisseur ni feuille. Si ça tombe sous 0, c'est autorisé mais enregistré dans les <b>Anomalies</b> (bouton dans la page Préparation) pour vérification et correction plus tard.</p>
         <p><b>Historique</b> : chaque "Vider" garde une sauvegarde datée, consultable, exportable en CSV, ou restaurable sur la feuille en cours.</p>
         <p><b>Prénom</b> : sert à savoir qui a compté quoi (affiché sur les lignes et dans les exports), et à voir qui d'autre a l'app ouverte en même temps. <button id="btnChangeUserName" style="display:inline; background:none; border:none; padding:0; margin:0; font-size:12.5px; font-family:inherit; color:var(--accent); font-weight:700;">Ton prénom : <span id="userNameDisplay">(non défini)</span> — toucher pour changer</button></p>
-        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v54 — 19/09</b></p>
+        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v55 — 19/09</b></p>
       </div>
     </div>
   </div>
@@ -1110,11 +1110,20 @@
     if(typeof supabase === 'undefined' || !supabase.createClient){ setSyncIndicator(false); return; }
     try{
       db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-      var res = await db.from('catalog').select('code, ref');
-      if(res.error) throw res.error;
+      var catalogRows = [];
+      var CATALOG_PAGE = 1000;
+      var from = 0;
+      while(true){
+        var page = await db.from('catalog').select('code, ref').range(from, from + CATALOG_PAGE - 1);
+        if(page.error) throw page.error;
+        var rows = page.data || [];
+        catalogRows = catalogRows.concat(rows);
+        if(rows.length < CATALOG_PAGE) break;
+        from += CATALOG_PAGE;
+      }
       var existingCodes = {};
       var changed = false;
-      (res.data || []).forEach(function(row){
+      catalogRows.forEach(function(row){
         existingCodes[row.code] = true;
         if(row.ref && catalog[row.code] !== row.ref){
           catalog[row.code] = row.ref;
