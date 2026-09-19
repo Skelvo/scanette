@@ -155,12 +155,13 @@
   .panel{ background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:14px; margin-bottom:12px; }
 
   /* ---------- Onglets Réception / Préparation ---------- */
-  .mode-tabs{ display:flex; gap:6px; background:var(--surface-2); border:1px solid var(--line); border-radius:var(--radius); padding:4px; margin-bottom:12px; }
+  .mode-tabs{ display:flex; gap:4px; background:var(--surface-2); border:1px solid var(--line); border-radius:var(--radius); padding:4px; margin-bottom:12px; }
   .mode-tab{
-    flex:1; display:flex; align-items:center; justify-content:center; gap:6px;
+    flex:1; min-width:0; display:flex; align-items:center; justify-content:center; gap:5px;
     background:transparent; border:none; color:var(--text-dim); border-radius:var(--radius-sm);
-    padding:10px 8px; font-family:var(--font-display); font-weight:700; font-size:13px;
+    padding:10px 4px; font-family:var(--font-display); font-weight:700; font-size:12px; white-space:nowrap;
   }
+  .mode-tab .icon{ flex-shrink:0; width:1em; height:1em; }
   .mode-tab.active{ background:var(--surface); color:var(--text); box-shadow:0 1px 3px rgba(0,0,0,.2); }
   .mode-tab#modeTabPrep.active{ color:var(--danger); }
 
@@ -301,6 +302,21 @@
   .anomaly-row .meta b{ color:var(--danger); }
   .anomaly-row.resolved{ opacity:.5; }
   .anomaly-row .row-actions{ margin-top:8px; }
+
+  .stock-qty-card{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  .stock-qty-card .ref{ font-family:var(--font-mono); font-weight:800; font-size:16px; overflow-wrap:break-word; }
+  .stock-qty-card .qty{ font-family:var(--font-mono); font-weight:800; font-size:26px; color:var(--accent); flex-shrink:0; }
+  .stock-qty-card .qty.negative{ color:var(--danger); }
+  .move-row{ display:flex; align-items:center; gap:10px; padding:10px 2px; border-bottom:1px solid var(--line); }
+  .move-row .move-delta{
+    font-family:var(--font-mono); font-weight:800; font-size:15px; flex-shrink:0;
+    width:52px; text-align:center; border-radius:8px; padding:4px 0;
+  }
+  .move-row .move-delta.in{ color:var(--success); background:rgba(63,174,107,.12); }
+  .move-row .move-delta.out{ color:var(--danger); background:rgba(221,91,77,.12); }
+  .move-row .move-info{ flex:1; min-width:0; }
+  .move-row .move-ref{ font-family:var(--font-mono); font-weight:700; font-size:13.5px; overflow-wrap:break-word; }
+  .move-row .move-meta{ font-size:11px; color:var(--text-faint); margin-top:2px; }
 
   /* ---------- Dernière action / Annuler ---------- */
   .last-action-bar{
@@ -490,6 +506,7 @@
   <div class="mode-tabs" id="modeTabs">
     <button class="mode-tab active" id="modeTabStock"><svg class="icon"><use href="#i-inbox"/></svg> Réception</button>
     <button class="mode-tab" id="modeTabPrep"><svg class="icon"><use href="#i-outbox"/></svg> Préparation</button>
+    <button class="mode-tab" id="modeTabLedger"><svg class="icon"><use href="#i-clock"/></svg> Stock</button>
   </div>
   <div id="stockView">
     <div class="panel">
@@ -640,6 +657,22 @@
       </div>
       <div id="anomaliesList"></div>
     </div>
+  </div>
+
+  <div id="ledgerView" style="display:none;">
+    <div class="panel">
+      <h2 style="margin:0 0 4px; font-size:16px;">Stock</h2>
+      <p class="sub" style="margin:0 0 14px;">Cherche une référence pour voir sa quantité actuelle, ou consulte en dessous l'historique des entrées et sorties.</p>
+      <div class="search-field">
+        <svg class="icon search-field-icon"><use href="#i-search"/></svg>
+        <input class="field" id="ledgerFilter" placeholder="Référence...">
+      </div>
+    </div>
+    <div id="ledgerStockResult"></div>
+    <div class="panel" style="margin-bottom:4px;">
+      <b style="font-size:13px;">Mouvements</b>
+    </div>
+    <div id="ledgerMovementsList"></div>
   </div>
   </main>
 
@@ -825,6 +858,7 @@
   var LOCATIONS_KEY = 'scanette_locations_v1';
   var STOCK_KEY = 'scanette_stock_v1';
   var ANOMALIES_KEY = 'scanette_anomalies_v1';
+  var MOVEMENTS_KEY = 'scanette_movements_v1';
   var PREP_SESSION_KEY = 'scanette_prep_session_v1';
   var PIN_KEY = 'scanette_pin_v1';
   var THEME_KEY = 'scanette_theme_v1';
@@ -840,6 +874,7 @@
   // de commande le décrémente. { ref: quantité }
   var stock = loadStock();
   var anomalies = loadAnomalies(); // retraits qui ont fait passer un stock sous 0, à vérifier chaque jour
+  var stockMovements = loadStockMovements(); // journal de toutes les entrées/sorties de stock, partagé avec l'équipe
   var prepSession = loadPrepSession(); // ce qui a été prélevé sur CET appareil depuis le dernier "Vider" de la session prépa
   var history = loadHistory(); // sauvegardes automatiques créées à chaque "Vider"
   var selected = new Set();
@@ -971,6 +1006,16 @@
   function saveAnomalies(){
     try{ localStorage.setItem(ANOMALIES_KEY, JSON.stringify(anomalies)); }catch(e){}
   }
+  function loadStockMovements(){
+    try{
+      var raw = localStorage.getItem(MOVEMENTS_KEY);
+      if(raw) return JSON.parse(raw);
+    }catch(e){}
+    return [];
+  }
+  function saveStockMovements(){
+    try{ localStorage.setItem(MOVEMENTS_KEY, JSON.stringify(stockMovements)); }catch(e){}
+  }
   function loadPrepSession(){
     try{
       var raw = localStorage.getItem(PREP_SESSION_KEY);
@@ -1065,6 +1110,7 @@
       initSharedLocations();
       initSharedStock();
       initSharedAnomalies();
+      initSharedStockMovements();
     }catch(e){
       console.error(e);
       db = null;
@@ -1222,13 +1268,55 @@
   // Optimiste en local tout de suite (retour immédiat à l'écran), puis
   // l'incrément atomique côté serveur ; le canal temps réel ci-dessus
   // rattrapera la valeur exacte si un autre appareil a scanné entre-temps.
-  function adjustStock(ref, delta){
+  // "type" ('reception' | 'prep') sert uniquement à l'affichage du journal
+  // des mouvements, pas au calcul du stock lui-même.
+  function adjustStock(ref, delta, type){
     if(!ref || !delta) return;
     ref = normalizeRef(ref);
     stock[ref] = (stock[ref] || 0) + delta;
     saveStock();
+    logStockMovement(ref, delta, stock[ref], type || 'reception');
     if(!db) return;
     db.rpc('increment_stock', { p_ref: String(ref), p_delta: delta })
+      .then(function(res){ if(res.error) console.error(res.error); });
+  }
+
+  /* ================= Journal des mouvements de stock (Supabase) ================= */
+  async function initSharedStockMovements(){
+    if(!db) return;
+    try{
+      var res = await db.from('stock_movements').select('*').order('at', { ascending: false }).limit(500);
+      if(res.error) throw res.error;
+      stockMovements = res.data || [];
+      saveStockMovements();
+      if(isLedgerViewOpen()) renderLedgerMovements();
+    }catch(e){ console.error(e); return; }
+
+    db.channel('movements-changes')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'stock_movements' }, function(payload){
+        var row = payload.new;
+        if(!row || !row.id) return;
+        // Écho possible de notre propre insert optimiste (même id) : on
+        // remplace plutôt que de dupliquer la ligne.
+        var idx = stockMovements.findIndex(function(m){ return m.id === row.id; });
+        if(idx !== -1) stockMovements[idx] = row; else stockMovements.unshift(row);
+        if(stockMovements.length > 500) stockMovements.length = 500;
+        saveStockMovements();
+        if(isLedgerViewOpen()) renderLedgerMovements();
+      })
+      .subscribe();
+  }
+  function logStockMovement(ref, delta, qtyAfter, type){
+    var entry = {
+      id: uid(), ref: ref, delta: delta, qty_after: qtyAfter, type: type,
+      by: currentUser || null, at: new Date().toISOString()
+    };
+    stockMovements.unshift(entry);
+    if(stockMovements.length > 500) stockMovements.length = 500;
+    saveStockMovements();
+    if(isLedgerViewOpen()) renderLedgerMovements();
+    if(!db) return;
+    db.from('stock_movements').insert(entry)
       .then(function(res){ if(res.error) console.error(res.error); });
   }
 
@@ -1728,7 +1816,7 @@
     lastAction = { supplierId: supplier.id, itemId: item.id, wasNew: wasNew, prevQty: prevQty, delta: item.qty - prevQty, itemSnapshot: JSON.parse(JSON.stringify(item)) };
     // La réception alimente aussi le stock partagé permanent, en plus de la
     // feuille par fournisseur — jamais vidé par "Vider".
-    adjustStock(item.ref, lastAction.delta);
+    adjustStock(item.ref, lastAction.delta, 'reception');
     document.getElementById('laaRef').innerHTML = refBreakHtml(item.ref);
     document.getElementById('laaDelta').textContent = (lastAction.delta >= 0 ? '+' : '') + lastAction.delta + '  →  ×' + item.qty;
     var bar = document.getElementById('lastActionBar');
@@ -1755,7 +1843,7 @@
   });
   function undoLastAction(){
     if(!lastAction) return;
-    if(lastAction.itemSnapshot) adjustStock(lastAction.itemSnapshot.ref, -lastAction.delta);
+    if(lastAction.itemSnapshot) adjustStock(lastAction.itemSnapshot.ref, -lastAction.delta, 'reception');
     var supplier = getSupplier(lastAction.supplierId);
     if(supplier){
       if(lastAction.wasNew){
@@ -2842,12 +2930,15 @@
   var $stockView = document.getElementById('stockView');
   var $locationsView = document.getElementById('locationsView');
   var $prepView = document.getElementById('prepView');
+  var $ledgerView = document.getElementById('ledgerView');
   var locationsFilterText = '';
   function isLocationsViewOpen(){ return $locationsView.style.display !== 'none'; }
   function isPrepViewOpen(){ return $prepView.style.display !== 'none'; }
+  function isLedgerViewOpen(){ return $ledgerView.style.display !== 'none'; }
   function showLocationsView(){
     $stockView.style.display = 'none';
     $prepView.style.display = 'none';
+    $ledgerView.style.display = 'none';
     $locationsView.style.display = 'block';
     document.getElementById('modeTabs').style.display = 'none';
     document.querySelector('.toolbar').style.display = 'none';
@@ -2865,10 +2956,12 @@
   function setModeTab(mode){
     document.getElementById('modeTabStock').classList.toggle('active', mode === 'stock');
     document.getElementById('modeTabPrep').classList.toggle('active', mode === 'prep');
+    document.getElementById('modeTabLedger').classList.toggle('active', mode === 'ledger');
   }
   function showStockView(){
     $locationsView.style.display = 'none';
     $prepView.style.display = 'none';
+    $ledgerView.style.display = 'none';
     $stockView.style.display = 'block';
     document.getElementById('modeTabs').style.display = 'flex';
     document.querySelector('.toolbar').style.display = '';
@@ -2880,6 +2973,7 @@
   function showPrepView(){
     $stockView.style.display = 'none';
     $locationsView.style.display = 'none';
+    $ledgerView.style.display = 'none';
     $prepView.style.display = 'block';
     document.getElementById('modeTabs').style.display = 'flex';
     document.querySelector('.toolbar').style.display = 'none';
@@ -2893,6 +2987,22 @@
   }
   document.getElementById('modeTabStock').addEventListener('click', showStockView);
   document.getElementById('modeTabPrep').addEventListener('click', showPrepView);
+
+  function showLedgerView(){
+    $stockView.style.display = 'none';
+    $locationsView.style.display = 'none';
+    $prepView.style.display = 'none';
+    $ledgerView.style.display = 'block';
+    document.getElementById('modeTabs').style.display = 'flex';
+    document.querySelector('.toolbar').style.display = 'none';
+    ledgerFilterText = '';
+    document.getElementById('ledgerFilter').value = '';
+    renderLedgerSearch();
+    renderLedgerMovements();
+    window.scrollTo(0, 0);
+    setModeTab('ledger');
+  }
+  document.getElementById('modeTabLedger').addEventListener('click', showLedgerView);
 
   /* ================= Menu (regroupe Catalogue / Emplacements / Historique / Thème / Verrouiller) ================= */
   function closeMoreMenu(){ document.getElementById('moreMenuModal').classList.remove('show'); }
@@ -3088,7 +3198,7 @@
     ref = normalizeRef(ref);
     if(!ref || !qty) return;
     var before = stock[ref] || 0;
-    adjustStock(ref, -qty);
+    adjustStock(ref, -qty, 'prep');
     var after = before - qty;
     if(after < 0){
       logStockAnomaly(ref, before, qty, after);
@@ -3109,7 +3219,7 @@
   }
   document.getElementById('btnUndoPrepLast').addEventListener('click', function(){
     if(!lastPrepAction) return;
-    adjustStock(lastPrepAction.ref, lastPrepAction.qty);
+    adjustStock(lastPrepAction.ref, lastPrepAction.qty, 'prep');
     if(prepSession.length) prepSession.shift();
     savePrepSession();
     renderPrepSession();
@@ -3188,6 +3298,63 @@
     showResolvedAnomalies = !showResolvedAnomalies;
     this.textContent = showResolvedAnomalies ? 'Cacher les corrigées' : 'Voir aussi les corrigées';
     renderAnomaliesList();
+  });
+
+  /* ================= Stock — journal des mouvements ================= */
+  var ledgerFilterText = '';
+  var LEDGER_MOVEMENTS_MAX_ROWS = 150;
+  function renderLedgerSearch(){
+    var wrap = document.getElementById('ledgerStockResult');
+    var q = ledgerFilterText.trim().toUpperCase();
+    if(!q){ wrap.innerHTML = ''; return; }
+    var refs = Object.keys(stock).filter(function(r){ return r.toUpperCase().indexOf(q) !== -1; });
+    refs.sort(naturalCompare);
+    if(refs.length > 12) refs = refs.slice(0, 12);
+    if(refs.length === 0){
+      wrap.innerHTML = '<div class="panel empty-state"><p>Aucune référence en stock ne correspond.</p></div>';
+      return;
+    }
+    var html = '';
+    refs.forEach(function(ref){
+      var qty = stock[ref] || 0;
+      var name = catalog[ref] || '';
+      html += '<div class="panel stock-qty-card">';
+      html += '<div><div class="ref">' + refBreakHtml(ref) + '</div>';
+      if(name) html += '<div class="sub" style="margin-top:2px;">' + escapeHtml(name) + '</div>';
+      html += '</div>';
+      html += '<div class="qty' + (qty < 0 ? ' negative' : '') + '">' + qty + '</div>';
+      html += '</div>';
+    });
+    wrap.innerHTML = html;
+  }
+  function renderLedgerMovements(){
+    var wrap = document.getElementById('ledgerMovementsList');
+    var q = ledgerFilterText.trim().toUpperCase();
+    var moves = q ? stockMovements.filter(function(m){ return (m.ref || '').toUpperCase().indexOf(q) !== -1; }) : stockMovements;
+    if(moves.length === 0){
+      wrap.innerHTML = '<div class="panel empty-state"><p>Aucun mouvement pour l\'instant.</p></div>';
+      return;
+    }
+    var truncated = moves.length > LEDGER_MOVEMENTS_MAX_ROWS;
+    var shown = truncated ? moves.slice(0, LEDGER_MOVEMENTS_MAX_ROWS) : moves;
+    var html = '<div class="panel" style="padding:4px 14px;">';
+    shown.forEach(function(m){
+      var isIn = m.delta > 0;
+      html += '<div class="move-row">';
+      html += '<div class="move-delta ' + (isIn ? 'in' : 'out') + '">' + (isIn ? '+' : '') + m.delta + '</div>';
+      html += '<div class="move-info">';
+      html += '<div class="move-ref">' + refBreakHtml(m.ref) + '</div>';
+      html += '<div class="move-meta">' + formatHistoryDate(m.at) + ' · ' + escapeHtml(m.by || 'Inconnu') + ' · ' + (m.type === 'prep' ? 'Préparation' : 'Réception') + ' · reste ' + m.qty_after + '</div>';
+      html += '</div></div>';
+    });
+    html += '</div>';
+    if(truncated) html += '<div class="panel empty-state"><p>+ ' + (moves.length - LEDGER_MOVEMENTS_MAX_ROWS) + ' autre(s) mouvement — affine ta recherche pour les voir.</p></div>';
+    wrap.innerHTML = html;
+  }
+  document.getElementById('ledgerFilter').addEventListener('input', function(){
+    ledgerFilterText = this.value;
+    renderLedgerSearch();
+    renderLedgerMovements();
   });
 
   /* ================= Historique ================= */

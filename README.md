@@ -26,7 +26,7 @@ Une seule page HTML/CSS/JS, sans build ni dépendances installées :
   catalogue code-barres → référence, répertoire d'emplacements en rayon et
   stock total partagé (réception + préparation de commande) synchronisés en
   temps réel via [Supabase](https://supabase.com)
-  (tables `catalog`, `locations`, `stock`, `stock_anomalies`)
+  (tables `catalog`, `locations`, `stock`, `stock_anomalies`, `stock_movements`)
 - Hébergement : déployé automatiquement sur
   [Cloudflare Workers](https://developers.cloudflare.com/workers/) à
   chaque push sur `main` (config dans `wrangler.jsonc`)
@@ -95,3 +95,26 @@ alter publication supabase_realtime add table public.stock_anomalies;
 Sans ces tables, la réception et la préparation de commande continuent de
 fonctionner (stock suivi en local sur l'appareil), mais sans partage
 d'équipe ni journal d'anomalies commun.
+
+L'onglet "Stock" (journal des entrées/sorties + recherche de quantité par
+référence) attend une troisième table, un journal en ajout seul (append-only)
+de chaque mouvement :
+
+```sql
+create table public.stock_movements (
+  id text primary key,
+  ref text not null,
+  delta integer not null,
+  qty_after integer not null,
+  type text not null,
+  by text,
+  at timestamptz not null default now()
+);
+create index on public.stock_movements (ref);
+create index on public.stock_movements (at desc);
+
+alter publication supabase_realtime add table public.stock_movements;
+```
+
+Sans cette table, le journal des mouvements reste local à l'appareil
+(pas de partage d'équipe sur l'onglet "Stock").
