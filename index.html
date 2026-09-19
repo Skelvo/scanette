@@ -577,7 +577,7 @@
         <p><b>Rotation des références</b> (menu •••) : classe les références par quantité totale sortie en Préparation, pour repérer ce qui part vite (ou pas du tout).</p>
         <p><b>Inventaire annuel</b> (onglet en haut) : scanne d'abord le code-barres d'un rayon — impossible de compter quoi que ce soit avant. Une fois ouvert, il liste tout ce qui doit s'y trouver (via Emplacements) et "Terminer le rayon" reste bloqué tant qu'il en manque. "Voir le rapport global" additionne les rayons terminés et affiche les écarts avec le stock système, exportables ou corrigeables en un clic (code de correction requis).</p>
         <p><b>Prénom</b> : sert à savoir qui a compté quoi (affiché sur les lignes et dans les exports), et à voir qui d'autre a l'app ouverte en même temps. <button id="btnChangeUserName" style="display:inline; background:none; border:none; padding:0; margin:0; font-size:12.5px; font-family:inherit; color:var(--accent); font-weight:700;">Ton prénom : <span id="userNameDisplay">(non défini)</span> — toucher pour changer</button></p>
-        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v66 — 19/09</b></p>
+        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v67 — 19/09</b></p>
       </div>
     </div>
   </div>
@@ -3533,13 +3533,26 @@
   // rayons différents plutôt que le même en même temps.
   var INVENTORY_UNASSIGNED_KEY = '__sans_emplacement__';
   var activeInventoryShelf = null;
+  // Un emplacement comme "a4a" est une sous-partie du rayon "a4" (a4a, a4b,
+  // a4c... même rayon physique, même étiquette à coller). L'inventaire
+  // raisonne au niveau du rayon complet (la lettre finale ignorée), pas de
+  // la sous-partie précise — contrairement à Emplacements (recherche par
+  // référence) qui garde lui la précision de la sous-partie.
+  function shelfBaseCode(code){
+    var s = String(code || '').toLowerCase().trim();
+    var m = /^([a-z]+\d+)[a-z]?$/.exec(s);
+    return m ? m[1] : s;
+  }
   function allShelfCodes(){
     var set = {};
-    Object.keys(locations).forEach(function(r){ (locations[r] || []).forEach(function(c){ set[c] = true; }); });
+    Object.keys(locations).forEach(function(r){ (locations[r] || []).forEach(function(c){ set[shelfBaseCode(c)] = true; }); });
     return Object.keys(set).sort(naturalCompare);
   }
   function shelfExpectedRefs(shelfCode){
-    return Object.keys(locations).filter(function(r){ return (locations[r] || []).indexOf(shelfCode) !== -1; }).sort(naturalCompare);
+    var base = shelfBaseCode(shelfCode);
+    return Object.keys(locations).filter(function(r){
+      return (locations[r] || []).some(function(loc){ return shelfBaseCode(loc) === base; });
+    }).sort(naturalCompare);
   }
   function showInventoryShelfPickerState(){
     document.getElementById('inventoryShelfActive').style.display = 'none';
@@ -3552,7 +3565,7 @@
     renderActiveShelf();
   }
   function enterShelf(code){
-    code = String(code || '').trim().toLowerCase();
+    code = code === INVENTORY_UNASSIGNED_KEY ? code : shelfBaseCode(code);
     if(!code) return;
     if(!inventoryShelves[code]) inventoryShelves[code] = { by: currentUser || null, startedAt: new Date().toISOString(), finishedAt: null, finishedBy: null, counts: {} };
     activeInventoryShelf = code;
@@ -3560,7 +3573,7 @@
     showInventoryShelfActiveState();
   }
   function tryEnterShelf(code){
-    code = String(code || '').trim().toLowerCase();
+    code = code === INVENTORY_UNASSIGNED_KEY ? code : shelfBaseCode(code);
     if(!code) return;
     if(code !== INVENTORY_UNASSIGNED_KEY && shelfExpectedRefs(code).length === 0 && !inventoryShelves[code]){
       openConfirm('Rayon inconnu', 'Aucune référence n\'est enregistrée dans "' + code + '" (Emplacements). Ouvrir quand même ?', function(){ enterShelf(code); });
@@ -3577,7 +3590,7 @@
   }
   document.getElementById('btnInventoryScanShelf').addEventListener('click', function(){ scanPurpose = 'inventory-shelf'; startScan(); });
   document.getElementById('btnInventoryManualShelf').addEventListener('click', function(){
-    askInput('Code du rayon (ex. a1b)', '', 'text').then(function(val){
+    askInput('Code du rayon (ex. a4 — la sous-partie finale n\'est pas nécessaire)', '', 'text').then(function(val){
       val = String(val || '').trim().toLowerCase();
       if(!val) return;
       tryEnterShelf(val);
