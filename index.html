@@ -154,6 +154,18 @@
 
   .panel{ background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:14px; margin-bottom:12px; }
 
+  /* ---------- Onglets Réception / Préparation ---------- */
+  .mode-tabs{ display:flex; gap:4px; background:var(--surface-2); border:1px solid var(--line); border-radius:var(--radius); padding:4px; margin-bottom:12px; }
+  .mode-tab{
+    flex:1; min-width:0; display:flex; align-items:center; justify-content:center; gap:5px;
+    background:transparent; border:none; color:var(--text-dim); border-radius:var(--radius-sm);
+    padding:10px 4px; font-family:var(--font-display); font-weight:700; font-size:12px; white-space:nowrap;
+  }
+  .mode-tab .icon{ flex-shrink:0; width:1em; height:1em; }
+  .mode-tab.active{ background:var(--surface); color:var(--text); box-shadow:0 1px 3px rgba(0,0,0,.2); }
+  .mode-tab#modeTabPrep.active{ color:var(--danger); }
+  .tab-badge-dot{ display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--danger); margin-left:1px; flex-shrink:0; }
+
   .scan-row{ display:flex; gap:10px; align-items:stretch; }
   .btn-scan{
     flex:1; background:var(--accent); color:var(--accent-ink); border:none; border-radius:var(--radius);
@@ -244,7 +256,22 @@
   .catalog-row{ display:flex; align-items:center; gap:8px; padding:10px 2px; border-bottom:1px solid var(--line); }
   .catalog-row .ref-wrap{ flex:1; min-width:0; }
   .catalog-row .ref-wrap .ref{ font-family:var(--font-mono); font-weight:700; font-size:14px; line-height:1.3; white-space:normal; overflow-wrap:break-word; }
-  .catalog-row .ref-wrap .code{ font-size:11px; color:var(--text-faint); margin-top:1px; }
+  .loc-badges{ display:flex; gap:6px; flex-wrap:wrap; margin-top:5px; }
+  .loc-badge{
+    font-family:var(--font-mono); font-weight:800; font-size:14px; letter-spacing:.3px;
+    background:var(--accent); color:var(--accent-ink); border:none; border-radius:20px;
+    padding:5px 12px; line-height:1.2;
+  }
+  .loc-badge:active{ opacity:.8; }
+  .loc-none{ font-size:11px; color:var(--text-faint); }
+
+  .shelf-item-row{ font-family:var(--font-mono); font-weight:700; font-size:15px; padding:11px 8px; border-bottom:1px solid var(--line); border-radius:6px; }
+  /* Couleur de surligneur fixe (pas liée aux tokens de thème) : comme un
+     vrai stabilo, elle doit rester la même en clair et en sombre. */
+  .shelf-item-row.highlight{
+    background:#ffe066; color:#1a1000; font-size:20px; font-weight:800;
+    border:2px solid var(--accent); border-radius:8px; padding:14px 12px; margin:4px 0;
+  }
 
   .history-row{ border-bottom:1px solid var(--line); padding:10px 2px; }
   .history-row-head{ display:flex; align-items:center; justify-content:space-between; cursor:pointer; }
@@ -264,6 +291,35 @@
   .help-toggle .q{ width:22px; height:22px; border-radius:50%; background:var(--surface-2); display:flex; align-items:center; justify-content:center; font-size:12px; color:var(--text-dim); }
   .help-body{ font-size:12.5px; color:var(--text-dim); line-height:1.7; margin-top:10px; }
   .help-body b{ color:var(--text); }
+
+  /* ---------- Préparation de commande / stock ---------- */
+  .anomaly-badge{ background:var(--danger); color:#fff; font-family:var(--font-mono); font-weight:800; font-size:11.5px; border-radius:20px; padding:3px 9px; min-width:20px; text-align:center; }
+  .prep-session-row{ display:flex; justify-content:space-between; align-items:baseline; gap:8px; padding:8px 2px; border-bottom:1px solid var(--line); font-size:13px; }
+  .prep-session-row .ref{ font-family:var(--font-mono); font-weight:700; flex:1; min-width:0; overflow-wrap:break-word; }
+  .prep-session-row .delta{ font-family:var(--font-mono); font-weight:800; color:var(--danger); flex-shrink:0; }
+  .anomaly-row{ padding:11px 2px; border-bottom:1px solid var(--line); }
+  .anomaly-row .ref{ font-family:var(--font-mono); font-weight:800; font-size:15px; }
+  .anomaly-row .meta{ font-size:11.5px; color:var(--text-dim); margin-top:3px; line-height:1.6; }
+  .anomaly-row .meta b{ color:var(--danger); }
+  .anomaly-row.resolved{ opacity:.5; }
+  .anomaly-row .row-actions{ margin-top:8px; }
+
+  .stock-qty-card{ display:flex; align-items:center; justify-content:space-between; gap:10px; cursor:pointer; }
+  .stock-qty-card:active{ background:var(--surface-2); }
+  .stock-qty-card .ref{ font-family:var(--font-mono); font-weight:800; font-size:16px; overflow-wrap:break-word; }
+  .stock-qty-card .qty{ font-family:var(--font-mono); font-weight:800; font-size:26px; color:var(--text); flex-shrink:0; }
+  .stock-qty-card .qty.low{ color:var(--accent); }
+  .stock-qty-card .qty.negative{ color:var(--danger); }
+  .move-row{ display:flex; align-items:center; gap:10px; padding:10px 2px; border-bottom:1px solid var(--line); }
+  .move-row .move-delta{
+    font-family:var(--font-mono); font-weight:800; font-size:15px; flex-shrink:0;
+    width:52px; text-align:center; border-radius:8px; padding:4px 0;
+  }
+  .move-row .move-delta.in{ color:var(--success); background:rgba(63,174,107,.12); }
+  .move-row .move-delta.out{ color:var(--danger); background:rgba(221,91,77,.12); }
+  .move-row .move-info{ flex:1; min-width:0; }
+  .move-row .move-ref{ font-family:var(--font-mono); font-weight:700; font-size:13.5px; overflow-wrap:break-word; }
+  .move-row .move-meta{ font-size:11px; color:var(--text-faint); margin-top:2px; }
 
   /* ---------- Dernière action / Annuler ---------- */
   .last-action-bar{
@@ -403,6 +459,10 @@
     <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M4 12a8 8 0 0 1 14-5.3M20 12a8 8 0 0 1-14 5.3"/><path d="M18 4v4h-4M6 20v-4h4"/></symbol>
     <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6 7l1 13h10l1-13"/></symbol>
     <symbol id="i-inbox" viewBox="0 0 24 24"><path d="M4 12h4l2 3h4l2-3h4"/><path d="M6 5h12l2 7v7H4v-7l2-7Z"/></symbol>
+    <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s7-6.7 7-11.5A7 7 0 0 0 5 9.5C5 14.3 12 21 12 21Z"/><circle cx="12" cy="9.5" r="2.4"/></symbol>
+    <symbol id="i-outbox" viewBox="0 0 24 24"><path d="M4 12h4l2 3h4l2-3h4"/><path d="M6 5h12l2 7v7H4v-7l2-7Z"/><path d="M12 3v7M9 7l3-3 3 3"/></symbol>
+    <symbol id="i-dots" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.6" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3 2 20h20L12 3Z"/><path d="M12 10v4"/><circle cx="12" cy="17" r="0.6" fill="currentColor" stroke="none"/></symbol>
   </defs>
 </svg>
 
@@ -434,10 +494,7 @@
       <div class="brand"><span class="mark"><svg class="icon"><use href="#i-box"/></svg></span> Scanette</div>
       <div class="head-actions">
         <div class="sync-dot off" id="syncDot" title="Catalogue partagé : hors ligne"><svg class="icon"><use href="#i-cloud"/></svg></div>
-        <button class="icon-btn" id="catalogBtn" title="Catalogue"><svg class="icon"><use href="#i-book"/></svg></button>
-        <button class="icon-btn" id="historyBtn" title="Historique"><svg class="icon"><use href="#i-clock"/></svg></button>
-        <button class="icon-btn" id="themeBtn" title="Thème"><svg class="icon"><use href="#i-theme"/></svg></button>
-        <button class="icon-btn" id="lockBtn" title="Verrouiller"><svg class="icon"><use href="#i-power"/></svg></button>
+        <button class="icon-btn" id="moreMenuBtn" title="Menu"><svg class="icon"><use href="#i-dots"/></svg></button>
       </div>
     </div>
     <div class="stat-row">
@@ -449,6 +506,12 @@
   </header>
 
   <main>
+  <div class="mode-tabs" id="modeTabs">
+    <button class="mode-tab active" id="modeTabStock"><svg class="icon"><use href="#i-inbox"/></svg> Réception</button>
+    <button class="mode-tab" id="modeTabPrep"><svg class="icon"><use href="#i-outbox"/></svg> Préparation</button>
+    <button class="mode-tab" id="modeTabLedger"><svg class="icon"><use href="#i-clock"/></svg> Stock<span class="tab-badge-dot" id="lowStockBadge" style="display:none;"></span></button>
+  </div>
+  <div id="stockView">
     <div class="panel">
       <div class="scan-row">
         <button class="btn-scan" id="btnScan"><svg class="icon icon-fill"><use href="#i-play"/></svg>&nbsp;DÉMARRER LE SCAN</button>
@@ -459,7 +522,7 @@
         </div>
       </div>
       <div class="row-btn2">
-        <button class="btn-ghost" id="btnPhotoRef"><svg class="icon"><use href="#i-camera"/></svg> Référence texte seule (sans code-barres)</button>
+        <button class="btn-ghost" id="btnPhotoRef" style="flex:1 1 100%;"><svg class="icon"><use href="#i-camera"/></svg> Référence texte seule (sans code-barres)</button>
       </div>
       <div class="supplier-bar">
         <div class="supplier-current" id="supplierCurrent">— aucun fournisseur —</div>
@@ -505,12 +568,115 @@
         <p><b>✎ / ✕</b> : renommer ou supprimer une référence directement depuis la ligne.</p>
         <p><b>Annuler</b> apparaît après chaque scan ou changement de quantité, pour revenir en arrière en un geste.</p>
         <p><b>Synchro</b> : le catalogue code-barres → référence est partagé avec toute l'équipe en temps réel. Dès que quelqu'un identifie un code, tout le monde le voit. Les quantités et fournisseurs restent, eux, propres à cet appareil.</p>
+        <p><b>Catalogue</b>, <b>Historique</b>, <b>Thème</b> et <b>Verrouiller</b> sont regroupés dans le menu (icône ••• en haut à droite), pour garder l'écran principal dégagé.</p>
         <p><b>Catalogue</b> : voir, renommer, supprimer ou ajouter à la main toutes les correspondances code-barres → référence connues sur cet appareil.</p>
+        <p><b>Emplacements</b> : associe à une référence un ou plusieurs codes de rangement (ex. a1b = allée A, rayon 1, part B). Touche le tag sous une référence, ou "Emplacements" dans le menu (•••) pour chercher où est rangée n'importe quelle référence, même hors de la feuille en cours. Partagé avec toute l'équipe en temps réel.</p>
+        <p><b>Stock</b> : un total permanent par référence, partagé avec toute l'équipe, séparé de la feuille de réception (qui reste juste un compteur qu'on vide). La réception l'alimente automatiquement. <b>Préparation de commande</b> (bouton sous le scan) : scanner une pièce prélevée la retire directement de ce stock, même sans fournisseur ni feuille. Si ça tombe sous 0, c'est autorisé mais enregistré dans les <b>Anomalies</b> (bouton dans la page Préparation) pour vérification et correction plus tard.</p>
         <p><b>Historique</b> : chaque "Vider" garde une sauvegarde datée, consultable, exportable en CSV, ou restaurable sur la feuille en cours.</p>
         <p><b>Prénom</b> : sert à savoir qui a compté quoi (affiché sur les lignes et dans les exports), et à voir qui d'autre a l'app ouverte en même temps. <button id="btnChangeUserName" style="display:inline; background:none; border:none; padding:0; margin:0; font-size:12.5px; font-family:inherit; color:var(--accent); font-weight:700;">Ton prénom : <span id="userNameDisplay">(non défini)</span> — toucher pour changer</button></p>
-        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v50 — 17/09 17:50</b></p>
+        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v53 — 19/09</b></p>
       </div>
     </div>
+  </div>
+
+  <div id="locationsView" style="display:none;">
+    <button class="btn-secondary" id="btnBackToStock" style="margin-top:0; margin-bottom:12px; display:flex; align-items:center; justify-content:center; gap:6px;">
+      <svg class="icon" style="width:1em;height:1em;"><use href="#i-backspace"/></svg> Retour à l'inventaire
+    </button>
+
+    <div id="locationsSearchView">
+      <div class="panel">
+        <h2 style="margin:0 0 4px; font-size:16px;">Où est cette référence ?</h2>
+        <p class="sub" style="margin:0 0 14px;">Cherche une référence ou un code-barres pour savoir où elle est rangée en rayon (ex. a1b), même hors de la feuille en cours.</p>
+        <div class="search-field">
+          <svg class="icon search-field-icon"><use href="#i-search"/></svg>
+          <input class="field" id="locationsPageFilter" placeholder="Référence ou code-barres...">
+        </div>
+      </div>
+      <div id="locationsPageList"></div>
+      <div class="panel">
+        <button class="btn-secondary" id="btnAddLocationEntryPage" style="margin-top:0;"><svg class="icon"><use href="#i-plus"/></svg> Ajouter une référence</button>
+      </div>
+    </div>
+
+    <div id="shelfDetailView" style="display:none;">
+      <button class="btn-secondary" id="btnBackToLocationsSearch" style="margin-bottom:12px;">← Retour à la recherche</button>
+      <div class="panel">
+        <h2 id="shelfDetailTitle" style="margin:0 0 4px; font-size:16px;">Rayon</h2>
+        <p class="sub" id="shelfDetailSub" style="margin:0;"></p>
+      </div>
+      <div id="shelfDetailList"></div>
+    </div>
+  </div>
+
+  <div id="prepView" style="display:none;">
+    <div id="prepMainView">
+      <div class="panel">
+        <h2 style="margin:0 0 4px; font-size:16px;">Préparation de commande</h2>
+        <p class="sub" style="margin:0 0 14px;">Scanne ce que tu prélèves : ça retire directement du stock partagé, sans passer par une feuille de fournisseur.</p>
+        <div class="scan-row">
+          <button class="btn-scan" id="btnPrepScan" style="background:var(--danger);"><svg class="icon icon-fill"><use href="#i-play"/></svg>&nbsp;SCANNER UN RETRAIT</button>
+          <div class="stepper">
+            <button id="prepStepDown">−</button>
+            <div class="val" id="prepStepVal">×1</div>
+            <button id="prepStepUp">+</button>
+          </div>
+        </div>
+        <button class="btn-secondary" id="btnPrepManualRef" style="margin-top:10px;">Taper la référence à la main</button>
+      </div>
+
+      <div class="panel">
+        <div class="help-toggle" id="anomaliesToggle">
+          <b style="font-size:13px;">Anomalies de stock</b>
+          <span class="anomaly-badge" id="anomalyBadge" style="display:none;">0</span>
+        </div>
+      </div>
+
+      <div class="last-action-bar" id="prepLastActionBar" style="position:static; display:none; max-width:none; margin:0 0 12px;">
+        <div class="laa-info">
+          <span class="laa-ref" id="prepLaaRef"></span>
+          <span class="laa-delta" id="prepLaaDelta"></span>
+        </div>
+        <button id="btnUndoPrepLast">↩ Annuler</button>
+      </div>
+
+      <div class="panel">
+        <div class="help-toggle" id="prepSessionToggle">
+          <b style="font-size:13px;">Prélevé dans cette session</b>
+          <button class="row-icon-btn" id="btnClearPrepSession" title="Vider la session">Vider</button>
+        </div>
+        <div id="prepSessionList"><p class="sub" style="margin:8px 0 0;">Rien de prélevé pour l'instant.</p></div>
+      </div>
+    </div>
+
+    <div id="anomaliesView" style="display:none;">
+      <button class="btn-secondary" id="btnBackToPrepFromAnomalies" style="margin-bottom:12px;">← Retour à la préparation</button>
+      <div class="panel">
+        <h2 style="margin:0 0 4px; font-size:16px;">Anomalies de stock</h2>
+        <p class="sub" id="anomaliesSub" style="margin:0;">Chaque retrait qui a fait tomber une référence sous 0 — à vérifier et corriger.</p>
+      </div>
+      <div class="filter-row" style="margin-bottom:8px;">
+        <button class="btn-secondary" id="btnToggleResolvedAnomalies" style="margin-top:0;">Voir aussi les corrigées</button>
+      </div>
+      <div id="anomaliesList"></div>
+    </div>
+  </div>
+
+  <div id="ledgerView" style="display:none;">
+    <div class="panel">
+      <h2 style="margin:0 0 4px; font-size:16px;">Stock</h2>
+      <p class="sub" style="margin:0 0 14px;">Cherche une référence pour voir sa quantité actuelle, ou consulte en dessous l'historique des entrées et sorties.</p>
+      <div class="search-field">
+        <svg class="icon search-field-icon"><use href="#i-search"/></svg>
+        <input class="field" id="ledgerFilter" placeholder="Référence...">
+      </div>
+    </div>
+    <div id="ledgerStockResult"></div>
+    <div class="panel" style="margin-bottom:4px;">
+      <b style="font-size:13px;">Mouvements</b>
+    </div>
+    <div id="ledgerMovementsList"></div>
+  </div>
   </main>
 
   <div class="last-action-bar" id="lastActionBar">
@@ -573,6 +739,24 @@
     <button class="btn-secondary" id="btnSearchOnline"><svg class="icon"><use href="#i-search"/></svg> Chercher ce code en ligne</button>
     <button class="btn-primary" style="margin-top:10px;" id="btnConfirmRef">OK</button>
     <button class="btn-secondary" id="btnSkipRef">Plus tard</button>
+  </div>
+</div>
+
+<!-- Menu (regroupe les actions secondaires) -->
+<div class="modal-backdrop" id="moreMenuModal">
+  <div class="sheet">
+    <h2>Menu</h2>
+    <div class="move-list">
+      <button id="menuCatalog"><svg class="icon"><use href="#i-book"/></svg> Catalogue</button>
+      <button id="menuLocations"><svg class="icon"><use href="#i-pin"/></svg> Emplacements</button>
+      <button id="menuHistory"><svg class="icon"><use href="#i-clock"/></svg> Historique</button>
+      <button id="menuStockCorrect"><svg class="icon"><use href="#i-refresh"/></svg> Corriger le stock</button>
+      <button id="menuStockThreshold"><svg class="icon"><use href="#i-alert"/></svg> Seuil d'alerte stock bas</button>
+      <button id="menuStockExport"><svg class="icon"><use href="#i-file"/></svg> Exporter le stock (CSV)</button>
+      <button id="menuTheme"><svg class="icon"><use href="#i-theme"/></svg> Thème</button>
+      <button id="menuLock"><svg class="icon"><use href="#i-power"/></svg> Verrouiller</button>
+    </div>
+    <button class="btn-secondary" id="btnCloseMoreMenu">Fermer</button>
   </div>
 </div>
 
@@ -677,6 +861,13 @@
   /* ================= State ================= */
   var STORE_KEY = 'scanette_data_v1';
   var CATALOG_KEY = 'scanette_catalog_v1';
+  var LOCATIONS_KEY = 'scanette_locations_v1';
+  var STOCK_KEY = 'scanette_stock_v1';
+  var ANOMALIES_KEY = 'scanette_anomalies_v1';
+  var MOVEMENTS_KEY = 'scanette_movements_v1';
+  var LOW_STOCK_THRESHOLD_KEY = 'scanette_low_stock_threshold_v1';
+  var CORRECTION_PIN_KEY = 'scanette_correction_pin_v1';
+  var PREP_SESSION_KEY = 'scanette_prep_session_v1';
   var PIN_KEY = 'scanette_pin_v1';
   var THEME_KEY = 'scanette_theme_v1';
   var SORT_KEY = 'scanette_sort_v1';
@@ -685,6 +876,15 @@
 
   var state = loadState();
   var catalog = loadCatalog(); // { code: refName } — local cache; source of truth is the shared db when connected
+  var locations = loadLocations(); // { ref: [emplacement, ...] } — répertoire à part, indépendant de l'inventaire courant
+  // Stock partagé permanent, indépendant de la feuille de réception : la
+  // réception l'alimente en plus (jamais vidé par "Vider"), la préparation
+  // de commande le décrémente. { ref: quantité }
+  var stock = loadStock();
+  var anomalies = loadAnomalies(); // retraits qui ont fait passer un stock sous 0, à vérifier chaque jour
+  var stockMovements = loadStockMovements(); // journal de toutes les entrées/sorties de stock, partagé avec l'équipe
+  var lowStockThreshold = loadLowStockThreshold(); // en-dessous (ou égal), une référence apparaît en alerte "stock bas"
+  var prepSession = loadPrepSession(); // ce qui a été prélevé sur CET appareil depuis le dernier "Vider" de la session prépa
   var history = loadHistory(); // sauvegardes automatiques créées à chaque "Vider"
   var selected = new Set();
   var listFilterText = '';
@@ -734,6 +934,8 @@
     return ax.length - bx.length;
   }
   var scanStep = 1;
+  var prepStep = 1; // multiplicateur de retrait, séparé de scanStep (réception)
+  var scanPurpose = 'reception'; // 'reception' | 'prep' — décide ce que fait onDetectedCode()
   var pendingCode = null; // barcode awaiting reference choice
   var lastDetected = { code: null, t: 0 };
   // Exige 2 lectures consécutives identiques avant de valider un code —
@@ -762,6 +964,86 @@
   }
   function saveCatalog(){
     try{ localStorage.setItem(CATALOG_KEY, JSON.stringify(catalog)); }catch(e){}
+  }
+  function loadLocations(){
+    try{
+      var raw = localStorage.getItem(LOCATIONS_KEY);
+      if(raw) return JSON.parse(raw);
+    }catch(e){}
+    return {};
+  }
+  function saveLocations(){
+    try{ localStorage.setItem(LOCATIONS_KEY, JSON.stringify(locations)); }catch(e){}
+  }
+  // Emplacements en minuscules (a1b) : convention déjà utilisée à l'atelier,
+  // volontairement différente de la casse des références (forcées en
+  // majuscules ailleurs dans l'app).
+  function parseLocationInput(raw){
+    return String(raw==null?'':raw).toLowerCase().split(/[\s,;/]+/).map(function(s){ return s.trim(); }).filter(Boolean);
+  }
+  function setLocationForRef(ref, rawInput){
+    ref = normalizeRef(ref);
+    if(!ref) return;
+    var codes = parseLocationInput(rawInput);
+    if(codes.length === 0){
+      delete locations[ref];
+      saveLocations();
+      deleteLocationEntry(ref);
+    } else {
+      locations[ref] = codes;
+      saveLocations();
+      writeLocationEntry(ref, codes);
+    }
+  }
+  function loadStock(){
+    try{
+      var raw = localStorage.getItem(STOCK_KEY);
+      if(raw) return JSON.parse(raw);
+    }catch(e){}
+    return {};
+  }
+  function saveStock(){
+    try{ localStorage.setItem(STOCK_KEY, JSON.stringify(stock)); }catch(e){}
+  }
+  function loadAnomalies(){
+    try{
+      var raw = localStorage.getItem(ANOMALIES_KEY);
+      if(raw) return JSON.parse(raw);
+    }catch(e){}
+    return [];
+  }
+  function saveAnomalies(){
+    try{ localStorage.setItem(ANOMALIES_KEY, JSON.stringify(anomalies)); }catch(e){}
+  }
+  function loadStockMovements(){
+    try{
+      var raw = localStorage.getItem(MOVEMENTS_KEY);
+      if(raw) return JSON.parse(raw);
+    }catch(e){}
+    return [];
+  }
+  function saveStockMovements(){
+    try{ localStorage.setItem(MOVEMENTS_KEY, JSON.stringify(stockMovements)); }catch(e){}
+  }
+  function loadLowStockThreshold(){
+    try{
+      var raw = localStorage.getItem(LOW_STOCK_THRESHOLD_KEY);
+      if(raw !== null){ var n = parseInt(raw, 10); if(!isNaN(n) && n >= 0) return n; }
+    }catch(e){}
+    return 3;
+  }
+  function saveLowStockThreshold(){
+    try{ localStorage.setItem(LOW_STOCK_THRESHOLD_KEY, String(lowStockThreshold)); }catch(e){}
+  }
+  function loadPrepSession(){
+    try{
+      var raw = localStorage.getItem(PREP_SESSION_KEY);
+      if(raw) return JSON.parse(raw);
+    }catch(e){}
+    return [];
+  }
+  function savePrepSession(){
+    try{ localStorage.setItem(PREP_SESSION_KEY, JSON.stringify(prepSession)); }catch(e){}
   }
   function loadHistory(){
     try{
@@ -844,6 +1126,10 @@
         catalogMigrated = true;
         migrateLocalCatalogToDb(existingCodes);
       }
+      initSharedLocations();
+      initSharedStock();
+      initSharedAnomalies();
+      initSharedStockMovements();
     }catch(e){
       console.error(e);
       db = null;
@@ -902,6 +1188,220 @@
   function deleteCatalogEntry(code){
     if(!db || !code) return;
     db.from('catalog').delete().eq('code', String(code))
+      .then(function(res){ if(res.error) console.error(res.error); });
+  }
+
+  /* ================= Emplacements partagés (Supabase) ================= */
+  // Répertoire séparé du catalogue code → référence : table "locations"
+  // (ref text primary key, locs jsonb, updated_at). Table à créer dans le
+  // même projet Supabase que "catalog" — voir README pour le SQL, le
+  // realtime doit aussi être activé dessus comme pour "catalog".
+  var locationsMigrated = false;
+  function migrateLocalLocationsToDb(existingRefs){
+    Object.keys(locations).forEach(function(ref){
+      if(!existingRefs[ref]) writeLocationEntry(ref, locations[ref]);
+    });
+  }
+  async function initSharedLocations(){
+    if(!db) return;
+    try{
+      var res = await db.from('locations').select('ref, locs');
+      if(res.error) throw res.error;
+      var existingRefs = {};
+      var changed = false;
+      (res.data || []).forEach(function(row){
+        existingRefs[row.ref] = true;
+        var arr = Array.isArray(row.locs) ? row.locs : [];
+        if(JSON.stringify(locations[row.ref] || []) !== JSON.stringify(arr)){
+          locations[row.ref] = arr;
+          changed = true;
+        }
+      });
+      if(changed) saveLocations();
+      if(!locationsMigrated){
+        locationsMigrated = true;
+        migrateLocalLocationsToDb(existingRefs);
+      }
+    }catch(e){
+      console.error(e);
+      return;
+    }
+
+    db.channel('locations-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'locations' }, function(payload){
+        var row = payload.eventType === 'DELETE' ? payload.old : payload.new;
+        if(!row || !row.ref) return;
+        if(payload.eventType === 'DELETE'){
+          delete locations[row.ref];
+        } else {
+          locations[row.ref] = Array.isArray(row.locs) ? row.locs : [];
+        }
+        saveLocations();
+        renderGroups();
+        if(isLocationsViewOpen()) renderLocationsPage();
+      })
+      .subscribe();
+  }
+  function writeLocationEntry(ref, locsArr){
+    if(!db || !ref) return;
+    db.from('locations').upsert({ ref: String(ref), locs: locsArr, updated_at: new Date().toISOString() })
+      .then(function(res){ if(res.error) console.error(res.error); });
+  }
+  function deleteLocationEntry(ref){
+    if(!db || !ref) return;
+    db.from('locations').delete().eq('ref', String(ref))
+      .then(function(res){ if(res.error) console.error(res.error); });
+  }
+
+  /* ================= Stock partagé (Supabase) ================= */
+  // Table "stock" (ref text primary key, qty int, updated_at) + fonction
+  // SQL "increment_stock(p_ref, p_delta)" à créer côté Supabase (voir
+  // README). Un incrément côté client passerait par une lecture puis une
+  // écriture séparées : deux appareils qui scannent en même temps
+  // écraseraient l'un le travail de l'autre. La fonction SQL fait
+  // l'addition directement dans la base, donc chaque scan s'additionne
+  // vraiment, même en même temps depuis plusieurs téléphones.
+  async function initSharedStock(){
+    if(!db) return;
+    try{
+      var res = await db.from('stock').select('ref, qty');
+      if(res.error) throw res.error;
+      var changed = false;
+      (res.data || []).forEach(function(row){
+        if(stock[row.ref] !== row.qty){ stock[row.ref] = row.qty; changed = true; }
+      });
+      if(changed) saveStock();
+      renderLowStockBadge();
+    }catch(e){ console.error(e); return; }
+
+    db.channel('stock-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'stock' }, function(payload){
+        var row = payload.eventType === 'DELETE' ? payload.old : payload.new;
+        if(!row || !row.ref) return;
+        stock[row.ref] = payload.eventType === 'DELETE' ? 0 : row.qty;
+        saveStock();
+        renderLowStockBadge();
+        renderGroups();
+        if(isPrepViewOpen()) renderPrepSession();
+      })
+      .subscribe();
+  }
+  // Optimiste en local tout de suite (retour immédiat à l'écran), puis
+  // l'incrément atomique côté serveur ; le canal temps réel ci-dessus
+  // rattrapera la valeur exacte si un autre appareil a scanné entre-temps.
+  // "type" ('reception' | 'prep') sert uniquement à l'affichage du journal
+  // des mouvements, pas au calcul du stock lui-même.
+  function adjustStock(ref, delta, type){
+    if(!ref || !delta) return;
+    ref = normalizeRef(ref);
+    stock[ref] = (stock[ref] || 0) + delta;
+    saveStock();
+    renderLowStockBadge();
+    logStockMovement(ref, delta, stock[ref], type || 'reception');
+    if(!db) return;
+    db.rpc('increment_stock', { p_ref: String(ref), p_delta: delta })
+      .then(function(res){ if(res.error) console.error(res.error); });
+  }
+
+  /* ================= Journal des mouvements de stock (Supabase) ================= */
+  async function initSharedStockMovements(){
+    if(!db) return;
+    try{
+      var res = await db.from('stock_movements').select('*').order('at', { ascending: false }).limit(500);
+      if(res.error) throw res.error;
+      stockMovements = res.data || [];
+      saveStockMovements();
+      if(isLedgerViewOpen()) renderLedgerMovements();
+    }catch(e){ console.error(e); return; }
+
+    db.channel('movements-changes')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'stock_movements' }, function(payload){
+        var row = payload.new;
+        if(!row || !row.id) return;
+        // Écho possible de notre propre insert optimiste (même id) : on
+        // remplace plutôt que de dupliquer la ligne.
+        var idx = stockMovements.findIndex(function(m){ return m.id === row.id; });
+        if(idx !== -1) stockMovements[idx] = row; else stockMovements.unshift(row);
+        if(stockMovements.length > 500) stockMovements.length = 500;
+        saveStockMovements();
+        if(isLedgerViewOpen()) renderLedgerMovements();
+      })
+      .subscribe();
+  }
+  function logStockMovement(ref, delta, qtyAfter, type){
+    var entry = {
+      id: uid(), ref: ref, delta: delta, qty_after: qtyAfter, type: type,
+      by: currentUser || null, at: new Date().toISOString()
+    };
+    stockMovements.unshift(entry);
+    if(stockMovements.length > 500) stockMovements.length = 500;
+    saveStockMovements();
+    if(isLedgerViewOpen()) renderLedgerMovements();
+    if(!db) return;
+    db.from('stock_movements').insert(entry)
+      .then(function(res){ if(res.error) console.error(res.error); });
+  }
+
+  /* ================= Anomalies de stock (Supabase) ================= */
+  async function initSharedAnomalies(){
+    if(!db) return;
+    try{
+      var res = await db.from('stock_anomalies').select('*').order('at', { ascending: false }).limit(500);
+      if(res.error) throw res.error;
+      anomalies = res.data || [];
+      saveAnomalies();
+      renderAnomalyBadge();
+    }catch(e){ console.error(e); return; }
+
+    db.channel('anomalies-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'stock_anomalies' }, function(payload){
+        if(payload.eventType === 'INSERT'){
+          // Peut être l'écho de notre propre insert optimiste (même id,
+          // déjà ajouté localement dans logStockAnomaly) : on remplace
+          // plutôt que d'ajouter une deuxième ligne.
+          var existingIdx = anomalies.findIndex(function(a){ return a.id === payload.new.id; });
+          if(existingIdx !== -1) anomalies[existingIdx] = payload.new;
+          else anomalies.unshift(payload.new);
+        } else if(payload.eventType === 'UPDATE'){
+          var i = anomalies.findIndex(function(a){ return a.id === payload.new.id; });
+          if(i !== -1) anomalies[i] = payload.new; else anomalies.unshift(payload.new);
+        } else if(payload.eventType === 'DELETE'){
+          anomalies = anomalies.filter(function(a){ return a.id !== payload.old.id; });
+        }
+        saveAnomalies();
+        renderAnomalyBadge();
+        if(isPrepViewOpen() && document.getElementById('anomaliesView').style.display !== 'none') renderAnomaliesList();
+      })
+      .subscribe();
+  }
+  function logStockAnomaly(ref, before, requested, after){
+    var entry = {
+      id: uid(), ref: ref, qty_before: before, qty_requested: requested, qty_after: after,
+      by: currentUser || null, at: new Date().toISOString(), resolved: false
+    };
+    anomalies.unshift(entry);
+    saveAnomalies();
+    renderAnomalyBadge();
+    if(!db) return;
+    // On envoie notre id généré localement (plutôt que d'en laisser
+    // générer un côté serveur) pour que l'écho temps réel de cet insert
+    // porte le même id, et que la déduplication dans le canal réalise
+    // "déjà vu, on remplace" plutôt que d'ajouter une deuxième ligne.
+    db.from('stock_anomalies').insert({
+      id: entry.id, ref: ref, qty_before: before, qty_requested: requested, qty_after: after,
+      by: currentUser || null, at: entry.at, resolved: false
+    }).then(function(res){ if(res.error) console.error(res.error); });
+  }
+  function resolveAnomaly(id){
+    var a = anomalies.find(function(x){ return x.id === id; });
+    if(a) a.resolved = true;
+    saveAnomalies();
+    renderAnomalyBadge();
+    if(!db || !a) return;
+    // Les entrées créées hors ligne ont un id local (uid()) qui ne
+    // correspond à aucune ligne côté serveur — pas de mise à jour à distance
+    // possible pour celles-là tant qu'elles n'ont pas été synchronisées.
+    db.from('stock_anomalies').update({ resolved: true }).eq('id', id)
       .then(function(res){ if(res.error) console.error(res.error); });
   }
 
@@ -1017,7 +1517,8 @@
     renderAll();
   }
   document.getElementById('btnChangeUserName').addEventListener('click', askUserName);
-  document.getElementById('lockBtn').addEventListener('click', function(){
+  document.getElementById('menuLock').addEventListener('click', function(){
+    closeMoreMenu();
     $app.style.display = 'none';
     $lock.style.display = 'flex';
     pinBuffer = ''; renderPinDots(); setLockHint(' ');
@@ -1039,7 +1540,7 @@
     var t = localStorage.getItem(THEME_KEY);
     if(t && t !== 'auto') applyTheme(t);
   })();
-  document.getElementById('themeBtn').addEventListener('click', toggleTheme);
+  document.getElementById('menuTheme').addEventListener('click', function(){ closeMoreMenu(); toggleTheme(); });
 
   /* ================= Toast ================= */
   var toastTimer = null;
@@ -1126,6 +1627,9 @@
         html += '<div class="chk'+(checked?' on':'')+'" data-role="chk">'+(checked?'✓':'')+'</div>';
         html += '<div class="ref"><div class="r1">'+refBreakHtml(it.ref)+'</div>';
         html += '<button class="price-tag'+(it.price!=null?' set':'')+'" data-role="price">'+escapeHtml(priceLabel)+'</button>';
+        var itLocs = locations[it.ref] || [];
+        var locLabel = itLocs.length ? itLocs.join(' · ') : '+ lieu';
+        html += '<button class="price-tag'+(itLocs.length?' set':'')+'" data-role="location">'+escapeHtml(locLabel)+'</button>';
         var itCodes = itemCodes(it);
         var codesHtml = itCodes.length ? itCodes.map(function(c){ return escapeHtml(c); }).join('<br>') : 'saisie manuelle';
         html += '<div class="r2">'+codesHtml+(it.by?' · '+escapeHtml(it.by):'')+'</div></div>';
@@ -1332,6 +1836,9 @@
     // il a déjà été retiré de supplier.items au moment de l'appel, et "Annuler"
     // devra le réinsérer plutôt que de chercher un id qui n'existe plus.
     lastAction = { supplierId: supplier.id, itemId: item.id, wasNew: wasNew, prevQty: prevQty, delta: item.qty - prevQty, itemSnapshot: JSON.parse(JSON.stringify(item)) };
+    // La réception alimente aussi le stock partagé permanent, en plus de la
+    // feuille par fournisseur — jamais vidé par "Vider".
+    adjustStock(item.ref, lastAction.delta, 'reception');
     document.getElementById('laaRef').innerHTML = refBreakHtml(item.ref);
     document.getElementById('laaDelta').textContent = (lastAction.delta >= 0 ? '+' : '') + lastAction.delta + '  →  ×' + item.qty;
     var bar = document.getElementById('lastActionBar');
@@ -1358,6 +1865,7 @@
   });
   function undoLastAction(){
     if(!lastAction) return;
+    if(lastAction.itemSnapshot) adjustStock(lastAction.itemSnapshot.ref, -lastAction.delta, 'reception');
     var supplier = getSupplier(lastAction.supplierId);
     if(supplier){
       if(lastAction.wasNew){
@@ -1659,7 +2167,8 @@
     lastDetected = { code: code, t: now };
     if(navigator.vibrate) navigator.vibrate(60);
     beep();
-    handleScannedCode(code);
+    if(scanPurpose === 'prep') handlePrepScannedCode(code);
+    else handleScannedCode(code);
   }
 
   function stopScan(){
@@ -1683,7 +2192,8 @@
     pendingConfirmCode = null;
     pendingConfirmCount = 0;
   }
-  document.getElementById('btnScan').addEventListener('click', startScan);
+  document.getElementById('btnScan').addEventListener('click', function(){ scanPurpose = 'reception'; startScan(); });
+  document.getElementById('btnPrepScan').addEventListener('click', function(){ scanPurpose = 'prep'; startScan(); });
   document.getElementById('btnCloseScan').addEventListener('click', stopScan);
 
   // Filet de secours : un trait effacé ou un code écrasé, c'est une info perdue sur
@@ -1697,7 +2207,8 @@
       code = code.trim();
       if(!code){ toast('Entre un code'); return; }
       beep();
-      handleScannedCode(code);
+      if(scanPurpose === 'prep') handlePrepScannedCode(code);
+      else handleScannedCode(code);
     });
   });
 
@@ -1899,6 +2410,15 @@
           item.price = p;
         }
         saveState(); renderAll();
+      });
+      return;
+    }
+    if(role === 'location'){
+      askInput('Emplacement(s) pour "' + item.ref + '" (ex. a1b, c2a)', (locations[item.ref] || []).join(', '), 'text').then(function(val){
+        if(val === null) return;
+        setLocationForRef(item.ref, val);
+        renderAll();
+        if(isLocationsViewOpen()) renderLocationsPage();
       });
       return;
     }
@@ -2416,11 +2936,551 @@
   document.getElementById('btnCloseCatalogX').addEventListener('click', function(){
     document.getElementById('catalogModal').classList.remove('show');
   });
-  document.getElementById('catalogBtn').addEventListener('click', function(){
+  document.getElementById('menuCatalog').addEventListener('click', function(){
+    closeMoreMenu();
     catalogFilterText = '';
     document.getElementById('catalogFilter').value = '';
     renderCatalogList();
     document.getElementById('catalogModal').classList.add('show');
+  });
+
+  /* ================= Emplacements — vraie page dédiée (pas une modale) ================= */
+  // Une page à part entière plutôt qu'une modale par-dessus l'inventaire :
+  // on cherche "où est cette référence" comme une tâche en soi, pas comme un
+  // réglage ponctuel qu'on referme aussitôt — ça mérite tout l'écran, avec
+  // un vrai retour en arrière plutôt qu'une fermeture de panneau.
+  var $stockView = document.getElementById('stockView');
+  var $locationsView = document.getElementById('locationsView');
+  var $prepView = document.getElementById('prepView');
+  var $ledgerView = document.getElementById('ledgerView');
+  var locationsFilterText = '';
+  function isLocationsViewOpen(){ return $locationsView.style.display !== 'none'; }
+  function isPrepViewOpen(){ return $prepView.style.display !== 'none'; }
+  function isLedgerViewOpen(){ return $ledgerView.style.display !== 'none'; }
+  function showLocationsView(){
+    $stockView.style.display = 'none';
+    $prepView.style.display = 'none';
+    $ledgerView.style.display = 'none';
+    $locationsView.style.display = 'block';
+    document.getElementById('modeTabs').style.display = 'none';
+    document.querySelector('.toolbar').style.display = 'none';
+    document.getElementById('shelfDetailView').style.display = 'none';
+    document.getElementById('locationsSearchView').style.display = 'block';
+    locationsFilterText = '';
+    document.getElementById('locationsPageFilter').value = '';
+    renderLocationsPage();
+    window.scrollTo(0, 0);
+    setTimeout(function(){ document.getElementById('locationsPageFilter').focus(); }, 150);
+  }
+  // Les deux onglets du haut reflètent toujours la vue active, même quand
+  // on y arrive autrement qu'en tapant dessus (ex. bouton "Retour" depuis
+  // Emplacements ramène sur Réception).
+  function setModeTab(mode){
+    document.getElementById('modeTabStock').classList.toggle('active', mode === 'stock');
+    document.getElementById('modeTabPrep').classList.toggle('active', mode === 'prep');
+    document.getElementById('modeTabLedger').classList.toggle('active', mode === 'ledger');
+  }
+  function showStockView(){
+    $locationsView.style.display = 'none';
+    $prepView.style.display = 'none';
+    $ledgerView.style.display = 'none';
+    $stockView.style.display = 'block';
+    document.getElementById('modeTabs').style.display = 'flex';
+    document.querySelector('.toolbar').style.display = '';
+    setModeTab('stock');
+  }
+  document.getElementById('menuLocations').addEventListener('click', function(){ closeMoreMenu(); showLocationsView(); });
+  document.getElementById('btnBackToStock').addEventListener('click', showStockView);
+
+  function showPrepView(){
+    $stockView.style.display = 'none';
+    $locationsView.style.display = 'none';
+    $ledgerView.style.display = 'none';
+    $prepView.style.display = 'block';
+    document.getElementById('modeTabs').style.display = 'flex';
+    document.querySelector('.toolbar').style.display = 'none';
+    document.getElementById('anomaliesView').style.display = 'none';
+    document.getElementById('prepMainView').style.display = 'block';
+    prepStep = 1;
+    renderPrepStep();
+    renderPrepSession();
+    window.scrollTo(0, 0);
+    setModeTab('prep');
+  }
+  document.getElementById('modeTabStock').addEventListener('click', showStockView);
+  document.getElementById('modeTabPrep').addEventListener('click', showPrepView);
+
+  function showLedgerView(){
+    $stockView.style.display = 'none';
+    $locationsView.style.display = 'none';
+    $prepView.style.display = 'none';
+    $ledgerView.style.display = 'block';
+    document.getElementById('modeTabs').style.display = 'flex';
+    document.querySelector('.toolbar').style.display = 'none';
+    ledgerFilterText = '';
+    document.getElementById('ledgerFilter').value = '';
+    renderLedgerSearch();
+    renderLedgerMovements();
+    window.scrollTo(0, 0);
+    setModeTab('ledger');
+  }
+  document.getElementById('modeTabLedger').addEventListener('click', showLedgerView);
+
+  /* ================= Menu (regroupe Catalogue / Emplacements / Historique / Thème / Verrouiller) ================= */
+  function closeMoreMenu(){ document.getElementById('moreMenuModal').classList.remove('show'); }
+  document.getElementById('moreMenuBtn').addEventListener('click', function(){
+    document.getElementById('moreMenuModal').classList.add('show');
+  });
+  document.getElementById('btnCloseMoreMenu').addEventListener('click', closeMoreMenu);
+  document.getElementById('anomaliesToggle').addEventListener('click', function(){
+    document.getElementById('prepMainView').style.display = 'none';
+    document.getElementById('anomaliesView').style.display = 'block';
+    renderAnomaliesList();
+    window.scrollTo(0, 0);
+  });
+  document.getElementById('btnBackToPrepFromAnomalies').addEventListener('click', function(){
+    document.getElementById('anomaliesView').style.display = 'none';
+    document.getElementById('prepMainView').style.display = 'block';
+  });
+
+  // Tous les codes-barres connus pour une référence (catalogue + articles de
+  // la feuille en cours), pour qu'une recherche par code-barres trouve aussi
+  // son emplacement.
+  function codesForRef(ref){
+    var codes = [];
+    Object.keys(catalog).forEach(function(c){ if(catalog[c] === ref) codes.push(c); });
+    state.suppliers.forEach(function(s){
+      s.items.forEach(function(it){ if(it.ref === ref) codes = codes.concat(itemCodes(it)); });
+    });
+    return codes;
+  }
+  // Le répertoire d'emplacements est volontairement indépendant de la
+  // feuille en cours : une référence déjà connue (catalogue ou inventaire)
+  // doit apparaître dans la recherche même sans emplacement enregistré, et
+  // même après un "Vider".
+  function allKnownRefs(){
+    var set = {};
+    Object.keys(locations).forEach(function(r){ set[r] = true; });
+    Object.keys(catalog).forEach(function(c){ if(catalog[c]) set[catalog[c]] = true; });
+    state.suppliers.forEach(function(s){ s.items.forEach(function(it){ set[it.ref] = true; }); });
+    return Object.keys(set).filter(Boolean);
+  }
+  // Le magasin peut avoir plusieurs milliers de références connues : lister
+  // tout d'un coup sans filtre ferait ramer la page (des milliers de lignes
+  // DOM d'un coup) pour un intérêt nul — on invite à chercher à la place, et
+  // on plafonne aussi le nombre de résultats affichés même filtrés.
+  var LOCATIONS_PAGE_MAX_ROWS = 200;
+  function renderLocationsPage(){
+    var wrap = document.getElementById('locationsPageList');
+    var q = locationsFilterText.trim().toLowerCase();
+    var refs = allKnownRefs();
+    if(!q && refs.length > LOCATIONS_PAGE_MAX_ROWS){
+      wrap.innerHTML = '<div class="panel empty-state"><p>' + refs.length + ' références connues — tape une référence ou un code-barres pour chercher.</p></div>';
+      return;
+    }
+    if(q){
+      refs = refs.filter(function(ref){
+        if(ref.toLowerCase().indexOf(q) !== -1) return true;
+        return codesForRef(ref).some(function(c){ return c.toLowerCase().indexOf(q) !== -1; });
+      });
+    }
+    refs.sort(naturalCompare);
+    if(refs.length === 0){
+      wrap.innerHTML = '<div class="panel empty-state"><p>' + (q
+        ? 'Aucune référence ne correspond à "' + escapeHtml(locationsFilterText) + '".'
+        : 'Aucune référence connue pour l\'instant — scanne ou ajoute une référence pour commencer.') + '</p></div>';
+      return;
+    }
+    var truncated = refs.length > LOCATIONS_PAGE_MAX_ROWS;
+    var shown = truncated ? refs.slice(0, LOCATIONS_PAGE_MAX_ROWS) : refs;
+    var html = '<div class="panel">';
+    shown.forEach(function(ref){
+      var locs = locations[ref] || [];
+      html += '<div class="catalog-row" data-ref="' + escapeHtml(ref) + '">';
+      html += '<div class="ref-wrap"><div class="ref">' + refBreakHtml(ref) + '</div><div class="loc-badges">';
+      html += locs.length
+        ? locs.map(function(l){ return '<button class="loc-badge" data-role="viewShelf" data-shelf="' + escapeHtml(l) + '">' + escapeHtml(l) + '</button>'; }).join('')
+        : '<span class="loc-none">aucun emplacement</span>';
+      html += '</div></div>';
+      html += '<button class="row-icon-btn" data-role="editLocation" title="Modifier">✎</button>';
+      if(locs.length) html += '<button class="row-icon-btn" data-role="deleteLocation" title="Supprimer">✕</button>';
+      html += '</div>';
+    });
+    html += '</div>';
+    if(truncated) html += '<div class="panel empty-state"><p>+ ' + (refs.length - LOCATIONS_PAGE_MAX_ROWS) + ' autre(s) résultat — affine ta recherche pour les voir.</p></div>';
+    wrap.innerHTML = html;
+  }
+  document.getElementById('locationsPageFilter').addEventListener('input', function(){
+    locationsFilterText = this.value;
+    renderLocationsPage();
+  });
+  // Détail d'un rayon : toutes les références qui y sont rangées, avec celle
+  // qu'on vient de chercher mise en évidence (comme un surligneur) pour la
+  // repérer d'un coup d'œil une fois devant le vrai rayon.
+  function showShelfDetail(shelfCode, originRef){
+    var refs = Object.keys(locations).filter(function(r){ return (locations[r] || []).indexOf(shelfCode) !== -1; });
+    refs.sort(naturalCompare);
+    document.getElementById('shelfDetailTitle').textContent = 'Rayon ' + shelfCode;
+    document.getElementById('shelfDetailSub').textContent = refs.length + ' référence(s) à cet emplacement.';
+    var html = '<div class="panel">';
+    refs.forEach(function(ref){
+      var isOrigin = ref === originRef;
+      html += '<div class="shelf-item-row' + (isOrigin ? ' highlight' : '') + '"' + (isOrigin ? ' id="shelfDetailOrigin"' : '') + '>' + refBreakHtml(ref) + '</div>';
+    });
+    html += '</div>';
+    document.getElementById('shelfDetailList').innerHTML = html;
+    document.getElementById('locationsSearchView').style.display = 'none';
+    document.getElementById('shelfDetailView').style.display = 'block';
+    if(originRef){
+      setTimeout(function(){
+        var el = document.getElementById('shelfDetailOrigin');
+        if(el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 50);
+    }
+  }
+  document.getElementById('btnBackToLocationsSearch').addEventListener('click', function(){
+    document.getElementById('shelfDetailView').style.display = 'none';
+    document.getElementById('locationsSearchView').style.display = 'block';
+  });
+  document.getElementById('locationsPageList').addEventListener('click', function(e){
+    var role = e.target.closest('[data-role]');
+    role = role ? role.getAttribute('data-role') : null;
+    if(role === 'viewShelf'){
+      var shelfBtn = e.target.closest('[data-shelf]');
+      var originRow = e.target.closest('.catalog-row');
+      showShelfDetail(shelfBtn.getAttribute('data-shelf'), originRow ? originRow.getAttribute('data-ref') : null);
+      return;
+    }
+    var row = e.target.closest('.catalog-row'); if(!row) return;
+    var ref = row.getAttribute('data-ref');
+    if(role === 'editLocation'){
+      askInput('Emplacement(s) pour "' + ref + '" (ex. a1b, c2a)', (locations[ref] || []).join(', '), 'text').then(function(val){
+        if(val === null) return;
+        setLocationForRef(ref, val);
+        renderLocationsPage();
+        renderGroups();
+        toast('Emplacement enregistré');
+      });
+      return;
+    }
+    if(role === 'deleteLocation'){
+      openConfirm('Supprimer cet emplacement ?', 'La référence "' + ref + '" n\'aura plus d\'emplacement enregistré.', function(){
+        setLocationForRef(ref, '');
+        renderLocationsPage();
+        renderGroups();
+        toast('Supprimé');
+      });
+      return;
+    }
+  });
+  document.getElementById('btnAddLocationEntryPage').addEventListener('click', function(){
+    askInput('Référence', '', 'text', true).then(function(ref){
+      ref = normalizeRef(ref);
+      if(!ref) return;
+      askInput('Emplacement(s) pour "' + ref + '" (ex. a1b, c2a)', (locations[ref] || []).join(', '), 'text').then(function(val){
+        if(val === null) return;
+        setLocationForRef(ref, val);
+        renderLocationsPage();
+        renderGroups();
+        toast('Emplacement enregistré');
+      });
+    });
+  });
+
+  /* ================= Préparation de commande ================= */
+  function renderPrepStep(){
+    document.getElementById('prepStepVal').textContent = '×' + prepStep;
+  }
+  document.getElementById('prepStepUp').addEventListener('click', function(){ prepStep = Math.min(99, prepStep + 1); renderPrepStep(); });
+  document.getElementById('prepStepDown').addEventListener('click', function(){ prepStep = Math.max(1, prepStep - 1); renderPrepStep(); });
+
+  // Résout un code scanné en référence via le catalogue partagé uniquement
+  // — pas via la feuille de réception de CET appareil, qui n'a aucune
+  // raison de contenir ce que quelqu'un d'autre a réceptionné ailleurs.
+  function handlePrepScannedCode(code){
+    var refName = catalog[code];
+    if(!refName){
+      flashScan(false);
+      pauseScanning();
+      askInput('Code inconnu — quelle référence retires-tu ?', '', 'text', true).then(function(val){
+        resumeScanning();
+        val = normalizeRef(val);
+        if(!val) return;
+        applyPrepPick(val, prepStep);
+      });
+      return;
+    }
+    flashScan(true);
+    applyPrepPick(refName, prepStep);
+  }
+
+  var lastPrepAction = null; // { ref, qty } — pour "Annuler"
+  var lastPrepActionTimer = null;
+  function applyPrepPick(ref, qty){
+    ref = normalizeRef(ref);
+    if(!ref || !qty) return;
+    var before = stock[ref] || 0;
+    adjustStock(ref, -qty, 'prep');
+    var after = before - qty;
+    if(after < 0){
+      logStockAnomaly(ref, before, qty, after);
+      toast('⚠ ' + ref + ' — stock insuffisant (' + before + ' dispo, ' + qty + ' retiré)', 3400);
+    } else {
+      toast(ref + '  −' + qty + '  →  reste ' + after);
+    }
+    prepSession.unshift({ ref: ref, qty: qty, after: after, at: new Date().toISOString(), by: currentUser || null });
+    savePrepSession();
+    renderPrepSession();
+    lastPrepAction = { ref: ref, qty: qty };
+    document.getElementById('prepLaaRef').innerHTML = refBreakHtml(ref);
+    document.getElementById('prepLaaDelta').textContent = '−' + qty + '  →  reste ' + after;
+    var bar = document.getElementById('prepLastActionBar');
+    bar.style.display = 'flex';
+    clearTimeout(lastPrepActionTimer);
+    lastPrepActionTimer = setTimeout(function(){ bar.style.display = 'none'; }, 6000);
+  }
+  document.getElementById('btnUndoPrepLast').addEventListener('click', function(){
+    if(!lastPrepAction) return;
+    adjustStock(lastPrepAction.ref, lastPrepAction.qty, 'prep');
+    if(prepSession.length) prepSession.shift();
+    savePrepSession();
+    renderPrepSession();
+    document.getElementById('prepLastActionBar').style.display = 'none';
+    clearTimeout(lastPrepActionTimer);
+    toast('Annulé');
+    lastPrepAction = null;
+  });
+  document.getElementById('btnPrepManualRef').addEventListener('click', function(){
+    askInput('Référence retirée', '', 'text', true).then(function(val){
+      val = normalizeRef(val);
+      if(!val) return;
+      applyPrepPick(val, prepStep);
+    });
+  });
+  document.getElementById('btnClearPrepSession').addEventListener('click', function(){
+    if(prepSession.length === 0) return;
+    openConfirm('Vider la session de préparation ?', 'La liste ci-dessous sera vidée sur cet appareil. Le stock déjà retiré n\'est PAS remis — seul l\'historique de cette liste disparaît.', function(){
+      prepSession = [];
+      savePrepSession();
+      renderPrepSession();
+      toast('Session vidée');
+    });
+  });
+  function renderPrepSession(){
+    var wrap = document.getElementById('prepSessionList');
+    if(prepSession.length === 0){
+      wrap.innerHTML = '<p class="sub" style="margin:8px 0 0;">Rien de prélevé pour l\'instant.</p>';
+      return;
+    }
+    var html = '';
+    prepSession.forEach(function(p){
+      html += '<div class="prep-session-row"><span class="ref">' + refBreakHtml(p.ref) + '</span><span class="delta">−' + p.qty + ' · reste ' + p.after + '</span></div>';
+    });
+    wrap.innerHTML = html;
+  }
+
+  /* ================= Anomalies de stock ================= */
+  var showResolvedAnomalies = false;
+  function renderAnomalyBadge(){
+    var el = document.getElementById('anomalyBadge');
+    var n = anomalies.filter(function(a){ return !a.resolved; }).length;
+    if(n > 0){ el.style.display = ''; el.textContent = n; }
+    else el.style.display = 'none';
+  }
+  function formatAnomalyDate(iso){
+    var d = new Date(iso);
+    return d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' }) + ' ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  }
+  function renderAnomaliesList(){
+    var wrap = document.getElementById('anomaliesList');
+    var list = showResolvedAnomalies ? anomalies : anomalies.filter(function(a){ return !a.resolved; });
+    document.getElementById('anomaliesSub').textContent = list.length + (showResolvedAnomalies ? ' anomalie(s) au total.' : ' anomalie(s) non corrigée(s).');
+    if(list.length === 0){
+      wrap.innerHTML = '<div class="panel empty-state"><p>' + (showResolvedAnomalies ? 'Aucune anomalie enregistrée.' : 'Aucune anomalie en attente — tout est corrigé.') + '</p></div>';
+      return;
+    }
+    var html = '<div class="panel">';
+    list.forEach(function(a){
+      html += '<div class="anomaly-row' + (a.resolved ? ' resolved' : '') + '">';
+      html += '<div class="ref">' + refBreakHtml(a.ref) + '</div>';
+      html += '<div class="meta">' + formatAnomalyDate(a.at) + (a.by ? ' · ' + escapeHtml(a.by) : '') + '<br>Stock ' + a.qty_before + ' → retrait de ' + a.qty_requested + ' → <b>' + a.qty_after + '</b></div>';
+      if(!a.resolved) html += '<div class="row-actions"><button class="btn-secondary" style="margin-top:0;" data-role="resolveAnomaly" data-id="' + escapeHtml(a.id) + '">Marquer corrigé</button></div>';
+      html += '</div>';
+    });
+    html += '</div>';
+    wrap.innerHTML = html;
+  }
+  document.getElementById('anomaliesList').addEventListener('click', function(e){
+    var btn = e.target.closest('[data-role="resolveAnomaly"]'); if(!btn) return;
+    resolveAnomaly(btn.getAttribute('data-id'));
+    renderAnomaliesList();
+    toast('Marqué corrigé');
+  });
+  document.getElementById('btnToggleResolvedAnomalies').addEventListener('click', function(){
+    showResolvedAnomalies = !showResolvedAnomalies;
+    this.textContent = showResolvedAnomalies ? 'Cacher les corrigées' : 'Voir aussi les corrigées';
+    renderAnomaliesList();
+  });
+
+  /* ================= Stock — journal des mouvements ================= */
+  var ledgerFilterText = '';
+  var LEDGER_MOVEMENTS_MAX_ROWS = 150;
+  var MOVEMENT_TYPE_LABELS = { reception: 'Réception', prep: 'Préparation', correction: 'Correction' };
+  function lowStockRefs(){
+    return Object.keys(stock)
+      .filter(function(r){ return stock[r] <= lowStockThreshold; })
+      .sort(function(a, b){ return stock[a] - stock[b]; });
+  }
+  function renderLowStockBadge(){
+    var el = document.getElementById('lowStockBadge');
+    el.style.display = lowStockRefs().length > 0 ? '' : 'none';
+    if(isLedgerViewOpen() && !ledgerFilterText.trim()) renderLedgerSearch();
+  }
+  function renderStockQtyCard(ref){
+    var qty = stock[ref] || 0;
+    var name = catalog[ref] || '';
+    var cls = qty < 0 ? ' negative' : (qty <= lowStockThreshold ? ' low' : '');
+    var html = '<div class="panel stock-qty-card" data-ref="' + escapeHtml(ref) + '">';
+    html += '<div><div class="ref">' + refBreakHtml(ref) + '</div>';
+    if(name) html += '<div class="sub" style="margin-top:2px;">' + escapeHtml(name) + '</div>';
+    html += '</div>';
+    html += '<div class="qty' + cls + '">' + qty + '</div>';
+    html += '</div>';
+    return html;
+  }
+  function renderLowStockSummary(wrap){
+    var list = lowStockRefs();
+    var html = '<div class="panel" style="display:flex; align-items:center; justify-content:space-between; gap:10px;">';
+    if(list.length > 0){
+      html += '<b style="font-size:13px; color:var(--danger);">⚠ ' + list.length + ' référence(s) en alerte (≤ ' + lowStockThreshold + ')</b>';
+    } else {
+      html += '<b style="font-size:13px;">Aucune alerte de stock bas (seuil : ' + lowStockThreshold + ')</b>';
+    }
+    html += '</div>';
+    if(list.length > 0) html += list.map(renderStockQtyCard).join('');
+    wrap.innerHTML = html;
+  }
+  function renderLedgerSearch(){
+    var wrap = document.getElementById('ledgerStockResult');
+    var q = ledgerFilterText.trim().toUpperCase();
+    if(!q){ renderLowStockSummary(wrap); return; }
+    var allRefs = {};
+    Object.keys(stock).forEach(function(r){ allRefs[r] = true; });
+    Object.keys(catalog).forEach(function(r){ allRefs[r] = true; });
+    var refs = Object.keys(allRefs).filter(function(r){ return r.toUpperCase().indexOf(q) !== -1; });
+    refs.sort(naturalCompare);
+    if(refs.length > 12) refs = refs.slice(0, 12);
+    if(refs.length === 0){
+      wrap.innerHTML = '<div class="panel empty-state"><p>Aucune référence ne correspond.</p></div>';
+      return;
+    }
+    wrap.innerHTML = refs.map(renderStockQtyCard).join('');
+  }
+  document.getElementById('ledgerStockResult').addEventListener('click', function(e){
+    var card = e.target.closest('.stock-qty-card'); if(!card) return;
+    startStockCorrection(card.getAttribute('data-ref'));
+  });
+  function renderLedgerMovements(){
+    var wrap = document.getElementById('ledgerMovementsList');
+    var q = ledgerFilterText.trim().toUpperCase();
+    var moves = q ? stockMovements.filter(function(m){ return (m.ref || '').toUpperCase().indexOf(q) !== -1; }) : stockMovements;
+    if(moves.length === 0){
+      wrap.innerHTML = '<div class="panel empty-state"><p>Aucun mouvement pour l\'instant.</p></div>';
+      return;
+    }
+    var truncated = moves.length > LEDGER_MOVEMENTS_MAX_ROWS;
+    var shown = truncated ? moves.slice(0, LEDGER_MOVEMENTS_MAX_ROWS) : moves;
+    var html = '<div class="panel" style="padding:4px 14px;">';
+    shown.forEach(function(m){
+      var isIn = m.delta > 0;
+      html += '<div class="move-row">';
+      html += '<div class="move-delta ' + (isIn ? 'in' : 'out') + '">' + (isIn ? '+' : '') + m.delta + '</div>';
+      html += '<div class="move-info">';
+      html += '<div class="move-ref">' + refBreakHtml(m.ref) + '</div>';
+      html += '<div class="move-meta">' + formatHistoryDate(m.at) + ' · ' + escapeHtml(m.by || 'Inconnu') + ' · ' + (MOVEMENT_TYPE_LABELS[m.type] || m.type) + ' · reste ' + m.qty_after + '</div>';
+      html += '</div></div>';
+    });
+    html += '</div>';
+    if(truncated) html += '<div class="panel empty-state"><p>+ ' + (moves.length - LEDGER_MOVEMENTS_MAX_ROWS) + ' autre(s) mouvement — affine ta recherche pour les voir.</p></div>';
+    wrap.innerHTML = html;
+  }
+  document.getElementById('ledgerFilter').addEventListener('input', function(){
+    ledgerFilterText = this.value;
+    renderLedgerSearch();
+    renderLedgerMovements();
+  });
+
+  /* ================= Correction manuelle de stock (protégée par code) ================= */
+  function askCorrectionPin(){
+    var stored = null;
+    try{ stored = localStorage.getItem(CORRECTION_PIN_KEY); }catch(e){}
+    if(!stored){
+      return askInput('Crée un code d\'accès pour les corrections de stock', '', 'numeric').then(function(code1){
+        if(!code1) return false;
+        return askInput('Confirme le code', '', 'numeric').then(function(code2){
+          if(!code2 || code1 !== code2){ toast('Les codes ne correspondent pas'); return false; }
+          try{ localStorage.setItem(CORRECTION_PIN_KEY, code1); }catch(e){}
+          toast('Code de correction créé');
+          return true;
+        });
+      });
+    }
+    return askInput('Code d\'accès pour corriger le stock', '', 'numeric').then(function(code){
+      if(code !== null && code === stored) return true;
+      if(code !== null) toast('Code incorrect');
+      return false;
+    });
+  }
+  function startStockCorrection(prefillRef){
+    var refPromise = prefillRef
+      ? Promise.resolve(prefillRef)
+      : askInput('Référence à corriger', '', 'text', true).then(function(v){ return normalizeRef(v); });
+    refPromise.then(function(ref){
+      if(!ref) return;
+      askCorrectionPin().then(function(ok){
+        if(!ok) return;
+        var current = stock[ref] || 0;
+        askInput('Nouvelle quantité pour "' + ref + '" (actuellement ' + current + ')', String(current), 'numeric').then(function(val){
+          if(val === null) return;
+          var n = parseInt(val, 10);
+          if(isNaN(n)){ toast('Quantité invalide'); return; }
+          var delta = n - current;
+          if(delta === 0){ toast('Stock déjà à jour'); return; }
+          adjustStock(ref, delta, 'correction');
+          toast('Stock corrigé : ' + ref + ' → ' + n);
+        });
+      });
+    });
+  }
+  document.getElementById('menuStockCorrect').addEventListener('click', function(){
+    closeMoreMenu();
+    startStockCorrection(null);
+  });
+  document.getElementById('menuStockThreshold').addEventListener('click', function(){
+    closeMoreMenu();
+    askInput('Seuil d\'alerte stock bas (pièces)', String(lowStockThreshold), 'numeric').then(function(val){
+      if(val === null) return;
+      var n = parseInt(val, 10);
+      if(isNaN(n) || n < 0){ toast('Valeur invalide'); return; }
+      lowStockThreshold = n;
+      saveLowStockThreshold();
+      renderLowStockBadge();
+      toast('Seuil mis à jour');
+    });
+  });
+  document.getElementById('menuStockExport').addEventListener('click', function(){
+    closeMoreMenu();
+    var refs = Object.keys(stock);
+    if(refs.length === 0){ toast('Aucun stock à exporter'); return; }
+    refs.sort(naturalCompare);
+    var lines = [csvRow(['Référence', 'Désignation', 'Quantité', 'Statut'])];
+    refs.forEach(function(ref){
+      var qty = stock[ref];
+      var status = qty < 0 ? 'Négatif' : (qty <= lowStockThreshold ? 'Bas' : 'OK');
+      lines.push(csvRow([ref, catalog[ref] || '', qty, status]));
+    });
+    var blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv' });
+    downloadFile('stock_' + new Date().toISOString().slice(0, 10) + '.csv', blob);
   });
 
   /* ================= Historique ================= */
@@ -2502,7 +3562,8 @@
     // toggleHistory ou clic hors action : ouvre/ferme le détail
     document.getElementById('historyDetail_'+id).classList.toggle('show');
   });
-  document.getElementById('historyBtn').addEventListener('click', function(){
+  document.getElementById('menuHistory').addEventListener('click', function(){
+    closeMoreMenu();
     renderHistoryList();
     document.getElementById('historyModal').classList.add('show');
   });
@@ -2517,6 +3578,8 @@
   renderPinDots();
   renderSortToggle();
   renderUserName();
+  renderAnomalyBadge();
+  renderLowStockBadge();
   showLockStep();
   initSharedCatalog();
 })();
