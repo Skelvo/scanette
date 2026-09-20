@@ -19,16 +19,24 @@ const pdfParse = require('pdf-parse');
 const { parseBLText, matchGarage, nextDepartureFor, MATCH_CONFIDENCE_THRESHOLD } = require('./bl_parser');
 const { CARRIER_LABELS, GARAGES_DATA } = require('./garages_data');
 
+// Dans un .exe empaqueté (pkg), __dirname pointe vers un système de
+// fichiers virtuel en lecture seule ("snapshot"), figé dans l'exécutable —
+// impossible d'y créer un dossier. process.execPath, lui, pointe toujours
+// vers le vrai fichier .exe sur le disque, donc son dossier est un vrai
+// dossier accessible en écriture. En exécution normale (node watcher.js,
+// hors .exe), process.pkg n'existe pas : on garde __dirname comme avant.
+const baseDir = process.pkg ? path.dirname(process.execPath) : __dirname;
+
 /* ================= Configuration — à adapter au PC réel ================= */
 const CONFIG = {
   // Dossier où PDFCreator enregistre les PDF (à faire correspondre au
   // "Répertoire de sauvegarde" configuré dans le profil PDFCreator).
-  watchFolder: process.env.BL_WATCH_FOLDER || path.join(__dirname, 'a_traiter'),
+  watchFolder: process.env.BL_WATCH_FOLDER || path.join(baseDir, 'a_traiter'),
   // Les PDF traités sont déplacés ici (archive), ceux qu'on n'a pas réussi
   // à comprendre sont déplacés dans "a_verifier" pour un tri manuel.
-  processedFolder: process.env.BL_PROCESSED_FOLDER || path.join(__dirname, 'traites'),
-  reviewFolder: process.env.BL_REVIEW_FOLDER || path.join(__dirname, 'a_verifier'),
-  logFile: process.env.BL_LOG_FILE || path.join(__dirname, 'watcher.log'),
+  processedFolder: process.env.BL_PROCESSED_FOLDER || path.join(baseDir, 'traites'),
+  reviewFolder: process.env.BL_REVIEW_FOLDER || path.join(baseDir, 'a_verifier'),
+  logFile: process.env.BL_LOG_FILE || path.join(baseDir, 'watcher.log'),
 
   supabaseUrl: process.env.SUPABASE_URL || 'https://crlajjxiztvlkveitjpy.supabase.co',
   supabaseKey: process.env.SUPABASE_KEY || 'sb_publishable_xxdT_igdGriNkQeM28vhzQ_6q3AI7SU',
