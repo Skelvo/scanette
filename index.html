@@ -577,7 +577,7 @@
         <p><b>Rotation des références</b> (menu •••) : classe les références par quantité totale sortie en Préparation, pour repérer ce qui part vite (ou pas du tout).</p>
         <p><b>Inventaire annuel</b> (onglet en haut) : scanne d'abord le code-barres d'un rayon — impossible de compter quoi que ce soit avant. Une fois ouvert, il liste tout ce qui doit s'y trouver (via Emplacements) et "Terminer le rayon" reste bloqué tant qu'il en manque. "Voir le rapport global" additionne les rayons terminés et affiche les écarts avec le stock système, exportables ou corrigeables en un clic (code de correction requis).</p>
         <p><b>Prénom</b> : sert à savoir qui a compté quoi (affiché sur les lignes et dans les exports), et à voir qui d'autre a l'app ouverte en même temps. <button id="btnChangeUserName" style="display:inline; background:none; border:none; padding:0; margin:0; font-size:12.5px; font-family:inherit; color:var(--accent); font-weight:700;">Ton prénom : <span id="userNameDisplay">(non défini)</span> — toucher pour changer</button></p>
-        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v68 — 20/09</b></p>
+        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v69 — 20/09</b></p>
       </div>
     </div>
   </div>
@@ -628,6 +628,7 @@
         </div>
         <button class="btn-primary" id="btnAddBL" style="margin-top:0;"><svg class="icon"><use href="#i-plus"/></svg> Ajouter un BL</button>
         <button class="btn-secondary" id="btnPrepDirect">Retrait sans BL (dépannage)</button>
+        <button class="btn-secondary" id="btnBLHistory">🕐 Historique des BL</button>
       </div>
 
       <div id="blqList"></div>
@@ -980,6 +981,18 @@
   .blp-row-actions { display:flex; gap:8px; margin-top:8px; }
   .blp-row-actions button { flex:1; margin-top:0; padding:7px; font-size:12px; }
   .blp-footer { position:fixed; bottom:0; left:0; right:0; background:var(--surface); border-top:1px solid var(--border); padding:12px 16px; max-width:640px; margin:0 auto; }
+
+  #blHistoryOverlay { display:none; position:fixed; inset:0; z-index:119; background:var(--bg); overflow-y:auto; }
+  #blHistoryOverlay.show { display:block; }
+  .blh-search { padding:12px 16px 0; max-width:640px; margin:0 auto; }
+  .blh-list { padding:12px 16px 24px; max-width:640px; margin:0 auto; display:flex; flex-direction:column; gap:10px; }
+  .blh-more { display:block; width:calc(100% - 32px); max-width:608px; margin:4px auto 24px; }
+
+  .blp-journal-title { font-size:12px; font-weight:700; color:var(--text-dim); text-transform:uppercase; letter-spacing:.5px; margin:18px 0 8px; }
+  .blp-journal-row { display:flex; align-items:baseline; gap:10px; padding:7px 0; border-bottom:1px solid var(--border); font-size:12px; }
+  .blp-journal-time { font-family:var(--font-mono); color:var(--text-dim); flex-shrink:0; }
+  .blp-journal-label { flex:1; }
+  .blp-journal-actor { color:var(--text-dim); flex-shrink:0; }
 </style>
 <div id="blPickingOverlay">
   <div class="blq-header">
@@ -995,9 +1008,25 @@
     <div id="blScanFeedback" style="display:none; margin-top:8px; padding:8px 12px; border-radius:6px; font-family:var(--font-mono); font-size:12px; font-weight:700;"></div>
   </div>
   <div class="blp-list" id="blpList"></div>
+  <div id="blpJournal" style="max-width:640px; margin:0 auto; padding:0 16px;"></div>
   <div class="blp-footer">
     <button class="btn-primary" id="btnValidateBL" style="margin-top:0;" disabled>Valider le BL</button>
   </div>
+</div>
+
+<div id="blHistoryOverlay">
+  <div class="blq-header">
+    <div>
+      <div class="blq-title">Historique des BL</div>
+      <div class="blq-sub" id="blhSub">—</div>
+    </div>
+    <button class="blq-close" id="btnCloseBLHistory">✕</button>
+  </div>
+  <div class="blh-search">
+    <input class="field" id="blHistorySearch" placeholder="Rechercher un client ou un n° de BL…">
+  </div>
+  <div class="blh-list" id="blHistoryList"></div>
+  <button class="btn-secondary blh-more" id="btnBLHistoryMore" style="display:none;">Charger plus</button>
 </div>
 
 <!-- Confirm modal générique -->
@@ -1771,6 +1800,38 @@
     if(!db) return;
     db.from('bl_queue').update({ status:'ready', items: items, completed_by: currentUser || 'Collègue', completed_at: nowIso, claimed_by:null, claimed_at:null })
       .eq('id', id).then(function(res){ if(res.error) console.error(res.error); });
+  }
+  // Historique : tous les BL terminés, sans la limite de 24h appliquée à la
+  // file active (refetchBLQueue) — paginé par date de fin décroissante, avec
+  // recherche optionnelle sur le client ou le numéro de document.
+  function fetchBLHistory(opts){
+    opts = opts || {};
+    if(!db) return Promise.resolve([]);
+    var q = db.from('bl_queue').select('*').eq('status', 'ready')
+      .order('completed_at', { ascending: false }).limit(opts.limit || 30);
+    if(opts.before) q = q.lt('completed_at', opts.before);
+    if(opts.search){
+      // Échappe les caractères qui ont un sens dans la syntaxe .or() de
+      // PostgREST (virgule, parenthèses) — un nom de client/n° de document
+      // n'en contient normalement pas, on les retire plutôt que de risquer
+      // une requête mal formée.
+      var s = String(opts.search).replace(/[,()]/g, '').trim();
+      if(s) q = q.or('client.ilike.%' + s + '%,doc_number.ilike.%' + s + '%');
+    }
+    return q.then(function(res){
+      if(res.error){ console.error(res.error); return []; }
+      return res.data || [];
+    });
+  }
+  // Journal d'audit d'un BL : chaque action horodatée (créé, pris, relâché,
+  // pièce scannée, terminé), avec qui l'a faite — pour l'écran d'historique.
+  function fetchBLEvents(blId){
+    if(!db) return Promise.resolve([]);
+    return db.from('bl_events').select('*').eq('bl_id', blId).order('at', { ascending: true })
+      .then(function(res){
+        if(res.error){ console.error(res.error); return []; }
+        return res.data || [];
+      });
   }
 
   /* ================= Lock / PIN ================= */
@@ -4518,6 +4579,8 @@
   window.__blSaveItems = saveBLItems;
   window.__blComplete = completeBLRow;
   window.__blLogEvent = logBLEvent;
+  window.__blFetchHistory = fetchBLHistory;
+  window.__blFetchEvents = fetchBLEvents;
 
   /* ================= Init ================= */
   renderPinDots();
@@ -4995,6 +5058,8 @@
       status: row.status,
       claimedBy: row.claimed_by,
       claimedAt: row.claimed_at,
+      completedBy: row.completed_by,
+      completedAt: row.completed_at,
       items: row.items || [],
       isDemo: false
     };
@@ -5156,12 +5221,43 @@
     if (readOnly) {
       btn.style.display = 'none';
       if (scanBtn) scanBtn.style.display = 'none';
+      renderBLJournal(bl.id);
     } else {
       btn.style.display = '';
       if (scanBtn) scanBtn.style.display = '';
       btn.disabled = !allOk;
       btn.textContent = allOk ? 'Valider le BL' : 'Valider le BL (' + doneLines + '/' + bl.items.length + ')';
+      var jEl = document.getElementById('blpJournal');
+      if (jEl) jEl.innerHTML = '';
     }
+  }
+
+  var BL_EVENT_LABELS = {
+    created: 'BL créé', claimed: 'Pris en charge', released: 'Relâché',
+    item_scanned: 'Pièce scannée', completed: 'Terminé'
+  };
+  function renderBLJournal(blId){
+    var el = document.getElementById('blpJournal');
+    if (!el) return;
+    el.innerHTML = '<div class="sub">Chargement du journal…</div>';
+    if (!window.__blFetchEvents) { el.innerHTML = ''; return; }
+    window.__blFetchEvents(blId).then(function(events){
+      // L'overlay a pu être fermée ou pointer vers un autre BL pendant le chargement.
+      if (!activeBL || activeBL.id !== blId) return;
+      if (!events || !events.length) { el.innerHTML = ''; return; }
+      var html = '<div class="blp-journal-title">Journal</div>';
+      events.forEach(function(ev){
+        var time = new Date(ev.at).toLocaleString('fr-FR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+        var label = BL_EVENT_LABELS[ev.event_type] || ev.event_type;
+        if (ev.event_type === 'item_scanned' && ev.detail) {
+          label += ' — ' + blEscapeHtml(ev.detail.ref) + ' (' + ev.detail.qtyDone + '/' + ev.detail.qtyRequired + ')';
+        }
+        html += '<div class="blp-journal-row"><span class="blp-journal-time">' + time + '</span>' +
+          '<span class="blp-journal-label">' + label + '</span>' +
+          '<span class="blp-journal-actor">' + blEscapeHtml(ev.actor || '—') + '</span></div>';
+      });
+      el.innerHTML = html;
+    });
   }
   document.getElementById('blpList').addEventListener('click', function(e){
     var btn = e.target.closest('[data-role]'); if (!btn) return;
@@ -5237,6 +5333,73 @@
     }
     bl.status = 'ready';
     closeBLPicking();
+  });
+
+  /* ── Historique des BL terminés (sans la limite 24h de la file active) ── */
+  var blHistoryList = [];
+  var blHistoryCursor = null; // completed_at du dernier BL chargé, pour la page suivante
+  var blHistorySearch = '';
+  var blHistorySearchTimer = null;
+
+  function openBLHistory(){
+    document.getElementById('blHistoryOverlay').classList.add('show');
+    document.getElementById('blHistorySearch').value = '';
+    blHistorySearch = '';
+    loadMoreBLHistory(true);
+  }
+  function closeBLHistory(){
+    document.getElementById('blHistoryOverlay').classList.remove('show');
+  }
+  function loadMoreBLHistory(reset){
+    if (!window.__blFetchHistory) return;
+    var moreBtn = document.getElementById('btnBLHistoryMore');
+    if (reset) { blHistoryList = []; blHistoryCursor = null; document.getElementById('blhSub').textContent = 'Chargement…'; }
+    if (moreBtn) { moreBtn.disabled = true; moreBtn.textContent = 'Chargement…'; }
+    window.__blFetchHistory({ before: reset ? null : blHistoryCursor, limit: 30, search: blHistorySearch }).then(function(rows){
+      rows = rows || [];
+      blHistoryList = reset ? rows : blHistoryList.concat(rows);
+      if (rows.length) blHistoryCursor = rows[rows.length - 1].completed_at;
+      renderBLHistoryList();
+      document.getElementById('blhSub').textContent = blHistoryList.length + ' BL terminé(s)' + (blHistorySearch ? ' pour "' + blHistorySearch + '"' : '');
+      if (moreBtn) {
+        moreBtn.disabled = false;
+        moreBtn.textContent = 'Charger plus';
+        moreBtn.style.display = rows.length < 30 ? 'none' : '';
+      }
+    });
+  }
+  function renderBLHistoryList(){
+    var wrap = document.getElementById('blHistoryList');
+    if (!blHistoryList.length) {
+      wrap.innerHTML = '<div class="panel empty-state"><p>Aucun BL terminé' + (blHistorySearch ? ' pour cette recherche' : ' pour le moment') + '.</p></div>';
+      return;
+    }
+    var html = '';
+    blHistoryList.forEach(function(row){
+      var when = new Date(row.completed_at).toLocaleString('fr-FR', { day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit' });
+      var items = row.items || [];
+      var doneLines = items.filter(function(it){ return it.qtyDone === it.qtyRequired; }).length;
+      html += '<div class="blq-card ready" data-id="' + row.id + '" style="cursor:pointer;">';
+      html += '<div class="blq-main"><div class="blq-client">' + blEscapeHtml(row.client) + '</div>';
+      html += '<div class="blq-meta">' + blEscapeHtml(row.doc_number || '') + ' · ' + doneLines + '/' + items.length + ' ligne(s) · par ' + blEscapeHtml(row.completed_by || '—') + '</div></div>';
+      html += '<div class="blq-count"><div class="blq-countdown done">✓</div><div class="blq-dep-label">' + when + '</div></div>';
+      html += '</div>';
+    });
+    wrap.innerHTML = html;
+  }
+  document.getElementById('btnBLHistory').addEventListener('click', openBLHistory);
+  document.getElementById('btnCloseBLHistory').addEventListener('click', closeBLHistory);
+  document.getElementById('btnBLHistoryMore').addEventListener('click', function(){ loadMoreBLHistory(false); });
+  document.getElementById('blHistorySearch').addEventListener('input', function(e){
+    var val = e.target.value;
+    clearTimeout(blHistorySearchTimer);
+    blHistorySearchTimer = setTimeout(function(){ blHistorySearch = val.trim(); loadMoreBLHistory(true); }, 350);
+  });
+  document.getElementById('blHistoryList').addEventListener('click', function(e){
+    var card = e.target.closest('.blq-card'); if (!card) return;
+    var row = blHistoryList.find(function(r){ return r.id === card.getAttribute('data-id'); });
+    if (!row) return;
+    openBLPicking(rowToLocalBL(row));
   });
 
   /* ── Ajouter un BL à la file (depuis un texte collé) ── */
