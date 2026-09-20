@@ -581,7 +581,7 @@
         <p><b>Rotation des références</b> (menu •••) : classe les références par quantité totale sortie en Préparation, pour repérer ce qui part vite (ou pas du tout).</p>
         <p><b>Inventaire annuel</b> (onglet en haut) : scanne d'abord le code-barres d'un rayon — impossible de compter quoi que ce soit avant. Une fois ouvert, il liste tout ce qui doit s'y trouver (via Emplacements) et "Terminer le rayon" reste bloqué tant qu'il en manque. "Voir le rapport global" additionne les rayons terminés et affiche les écarts avec le stock système, exportables ou corrigeables en un clic (code de correction requis).</p>
         <p><b>Prénom</b> : sert à savoir qui a compté quoi (affiché sur les lignes et dans les exports), et à voir qui d'autre a l'app ouverte en même temps. <button id="btnChangeUserName" style="display:inline; background:none; border:none; padding:0; margin:0; font-size:12.5px; font-family:inherit; color:var(--accent); font-weight:700;">Ton prénom : <span id="userNameDisplay">(non défini)</span> — toucher pour changer</button></p>
-        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v72 — 20/09</b></p>
+        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v73 — 20/09</b></p>
       </div>
     </div>
   </div>
@@ -815,6 +815,7 @@
     <h2>Menu</h2>
     <div class="move-list">
       <button id="menuStockCorrectPinChange"><svg class="icon"><use href="#i-refresh"/></svg> Changer le code de correction</button>
+      <button id="menuInventoryCodeChange"><svg class="icon"><use href="#i-refresh"/></svg> Changer le code Inventaire</button>
       <button id="menuStockThreshold"><svg class="icon"><use href="#i-alert"/></svg> Seuil d'alerte stock bas</button>
       <button id="menuStockExport"><svg class="icon"><use href="#i-file"/></svg> Exporter le stock (CSV)</button>
       <button id="menuMovementsExport"><svg class="icon"><use href="#i-file"/></svg> Exporter le journal (CSV)</button>
@@ -1078,6 +1079,8 @@
   var MOVEMENTS_KEY = 'scanette_movements_v1';
   var LOW_STOCK_THRESHOLD_KEY = 'scanette_low_stock_threshold_v1';
   var CORRECTION_PIN_KEY = 'scanette_correction_pin_v1';
+  var INVENTORY_CODE_KEY = 'scanette_inventory_code_v1';
+  var INVENTORY_CODE_DEFAULT = 'bellecave2026*';
   var PREP_SESSION_KEY = 'scanette_prep_session_v1';
   var INVENTORY_SHELVES_KEY = 'scanette_inventory_shelves_v1';
   var PIN_KEY = 'scanette_pin_v1';
@@ -1119,13 +1122,67 @@
     var el = document.getElementById('userNameDisplay');
     if(el) el.textContent = currentUser || '(non défini)';
   }
+  // Empêche deux personnes d'avoir le même prénom affiché (ex. deux
+  // "Benoit") : liste partagée sur Supabase (table registered_names, clé
+  // primaire normalisée en minuscules), vérifiée avant d'accepter un
+  // prénom. Si Supabase est injoignable, on n'empêche pas de continuer
+  // (mieux vaut un doublon exceptionnel qu'un onboarding bloqué), le
+  // contrôle se refera dès la reconnexion.
+  function normalizeNameKey(name){ return normalizeRef(name).toLowerCase(); }
+  function isNameTaken(name){
+    if(!db) return Promise.resolve(false);
+    return db.from('registered_names').select('name_key').eq('name_key', normalizeNameKey(name)).maybeSingle()
+      .then(function(res){
+        if(res.error){ console.error(res.error); return false; }
+        return !!res.data;
+      }).catch(function(e){ console.error(e); return false; });
+  }
+  function registerName(name){
+    if(!db) return Promise.resolve(true);
+    return db.from('registered_names').insert({ name_key: normalizeNameKey(name), name_display: name })
+      .then(function(res){
+        if(res.error){
+          // Conflit de clé primaire : quelqu'un vient de prendre ce prénom entre-temps.
+          if(res.error.code === '23505') return false;
+          console.error(res.error);
+          return true;
+        }
+        return true;
+      }).catch(function(e){ console.error(e); return true; });
+  }
   function askUserName(onDone){
     askInput('Ton prénom (pour savoir qui a compté quoi)', currentUser, 'text').then(function(val){
-      if(val !== null){
-        setCurrentUser(val);
-        toast(currentUser ? 'Prénom enregistré : ' + currentUser : 'Prénom effacé');
+      if(val === null){ if(onDone) onDone(); return; }
+      var normalized = normalizeRef(val);
+      if(!normalized){
+        setCurrentUser('');
+        toast('Prénom effacé');
+        if(onDone) onDone();
+        return;
       }
-      if(onDone) onDone();
+      if(normalizeNameKey(normalized) === normalizeNameKey(currentUser)){
+        setCurrentUser(normalized);
+        toast('Prénom enregistré : ' + currentUser);
+        if(onDone) onDone();
+        return;
+      }
+      isNameTaken(normalized).then(function(taken){
+        if(taken){
+          toast('Ce prénom est déjà pris — ajoute une initiale pour te différencier (ex. Benoit G, Benoit U)');
+          if(onDone) onDone();
+          return;
+        }
+        registerName(normalized).then(function(ok){
+          if(!ok){
+            toast('Ce prénom vient d\'être pris à l\'instant — choisis-en un autre');
+            if(onDone) onDone();
+            return;
+          }
+          setCurrentUser(normalized);
+          toast('Prénom enregistré : ' + currentUser);
+          if(onDone) onDone();
+        });
+      });
     });
   }
 
@@ -1315,6 +1372,8 @@
   var db = null;
   var catalogMigrated = false;
   var sharedCorrectionPin = null; // code d'accès partagé pour les corrections de stock, synchronisé via app_settings
+  var sharedInventoryCode = null; // code d'accès partagé pour l'onglet Inventaire, synchronisé via app_settings
+  var inventoryUnlockedThisSession = false; // redemandé au reverrouillage de l'app, pas à chaque clic d'onglet
 
   function setSyncIndicator(on){
     var el = document.getElementById('syncDot');
@@ -1364,6 +1423,7 @@
       initSharedAnomalies();
       initSharedStockMovements();
       initSharedCorrectionPin();
+      initSharedInventoryCode();
       initSharedBLQueue();
     }catch(e){
       console.error(e);
@@ -1882,8 +1942,24 @@
   function confirmNameStep(){
     var val = normalizeRef(document.getElementById('nameStepInput').value);
     if(!val){ toast('Entre ton prénom'); return; }
-    setCurrentUser(val);
-    showLockStep();
+    var btn = document.getElementById('nameStepContinue');
+    btn.disabled = true;
+    isNameTaken(val).then(function(taken){
+      if(taken){
+        btn.disabled = false;
+        toast('Ce prénom est déjà pris — ajoute une initiale pour te différencier (ex. Benoit G, Benoit U)');
+        return;
+      }
+      registerName(val).then(function(ok){
+        btn.disabled = false;
+        if(!ok){
+          toast('Ce prénom vient d\'être pris à l\'instant — choisis-en un autre');
+          return;
+        }
+        setCurrentUser(val);
+        showLockStep();
+      });
+    });
   }
   document.getElementById('nameStepContinue').addEventListener('click', confirmNameStep);
   document.getElementById('nameStepInput').addEventListener('keydown', function(e){
@@ -1952,6 +2028,7 @@
     $app.style.display = 'none';
     $lock.style.display = 'flex';
     pinBuffer = ''; renderPinDots(); setLockHint(' ');
+    inventoryUnlockedThisSession = false;
   });
 
   /* ================= Theme ================= */
@@ -3046,15 +3123,18 @@
 
   /* ================= Vider ================= */
   document.getElementById('btnClear').addEventListener('click', function(){
-    openConfirm('Vider la feuille ?', 'Une sauvegarde est gardée dans l\'historique. Le catalogue de correspondances est conservé aussi.', function(){
-      snapshotToHistory();
-      state.suppliers = [];
-      state.activeSupplierId = null;
-      selected.clear();
-      lastAction = null;
-      document.getElementById('lastActionBar').classList.remove('show');
-      saveState(); renderAll();
-      toast('Feuille vidée — sauvegardée dans l\'historique');
+    askCorrectionPin().then(function(ok){
+      if(!ok) return;
+      openConfirm('Vider la feuille ?', 'Une sauvegarde est gardée dans l\'historique. Le catalogue de correspondances est conservé aussi.', function(){
+        snapshotToHistory();
+        state.suppliers = [];
+        state.activeSupplierId = null;
+        selected.clear();
+        lastAction = null;
+        document.getElementById('lastActionBar').classList.remove('show');
+        saveState(); renderAll();
+        toast('Feuille vidée — sauvegardée dans l\'historique');
+      });
     });
   });
 
@@ -3519,7 +3599,9 @@
     window.scrollTo(0, 0);
     setModeTab('inventory');
   }
-  document.getElementById('modeTabInventory').addEventListener('click', showInventoryView);
+  document.getElementById('modeTabInventory').addEventListener('click', function(){
+    askInventoryCode().then(function(ok){ if(ok) showInventoryView(); });
+  });
 
   /* ================= Menu (regroupe Catalogue / Emplacements / Historique / Thème / Verrouiller) ================= */
   function closeMoreMenu(){ document.getElementById('moreMenuModal').classList.remove('show'); }
@@ -4359,6 +4441,68 @@
       });
     });
   }
+
+  /* ================= Code d'accès partagé pour l'onglet Inventaire =================
+     Même principe que le code de correction de stock (synchronisé via
+     app_settings), mais un code à part, choisi par l'utilisateur plutôt que
+     créé à la volée. Redemandé une fois par session (jusqu'au verrouillage
+     de l'app), pas à chaque clic sur l'onglet. */
+  async function initSharedInventoryCode(){
+    if(!db) return;
+    try{
+      var res = await db.from('app_settings').select('value').eq('key', 'inventory_access_code').maybeSingle();
+      if(res.error) throw res.error;
+      if(res.data && res.data.value){
+        sharedInventoryCode = res.data.value;
+        try{ localStorage.setItem(INVENTORY_CODE_KEY, sharedInventoryCode); }catch(e){}
+      } else {
+        // Rien en base encore : on initialise avec le code choisi par l'équipe.
+        sharedInventoryCode = INVENTORY_CODE_DEFAULT;
+        writeInventoryCode(INVENTORY_CODE_DEFAULT);
+        try{ localStorage.setItem(INVENTORY_CODE_KEY, INVENTORY_CODE_DEFAULT); }catch(e){}
+      }
+    }catch(e){ console.error(e); return; }
+    db.channel('inventory-code-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings', filter: 'key=eq.inventory_access_code' }, function(payload){
+        var row = payload.new;
+        if(!row || !row.value) return;
+        sharedInventoryCode = row.value;
+        try{ localStorage.setItem(INVENTORY_CODE_KEY, row.value); }catch(e){}
+      })
+      .subscribe();
+  }
+  function writeInventoryCode(value){
+    if(!db) return;
+    db.from('app_settings').upsert({ key: 'inventory_access_code', value: value, updated_at: new Date().toISOString() })
+      .then(function(res){ if(res.error) console.error(res.error); });
+  }
+  function askInventoryCode(){
+    if(inventoryUnlockedThisSession) return Promise.resolve(true);
+    var stored = sharedInventoryCode;
+    if(!stored){ try{ stored = localStorage.getItem(INVENTORY_CODE_KEY); }catch(e){} }
+    if(!stored) stored = INVENTORY_CODE_DEFAULT;
+    return askInput('Code d\'accès pour l\'Inventaire', '', 'text').then(function(code){
+      if(code !== null && code === stored){ inventoryUnlockedThisSession = true; return true; }
+      if(code !== null) toast('Code incorrect');
+      return false;
+    });
+  }
+  function changeInventoryCode(){
+    askInventoryCode().then(function(ok){
+      if(!ok) return;
+      askInput('Nouveau code d\'accès Inventaire', '', 'text').then(function(code1){
+        if(!code1) return;
+        askInput('Confirme le nouveau code', '', 'text').then(function(code2){
+          if(!code2 || code1 !== code2){ toast('Les codes ne correspondent pas'); return; }
+          sharedInventoryCode = code1;
+          try{ localStorage.setItem(INVENTORY_CODE_KEY, code1); }catch(e){}
+          writeInventoryCode(code1);
+          toast('Code Inventaire changé pour toute l\'équipe');
+        });
+      });
+    });
+  }
+
   function startStockCorrection(prefillRef){
     var refPromise = prefillRef
       ? Promise.resolve(prefillRef)
@@ -4387,6 +4531,10 @@
   document.getElementById('menuStockCorrectPinChange').addEventListener('click', function(){
     closeMoreMenu();
     changeCorrectionPin();
+  });
+  document.getElementById('menuInventoryCodeChange').addEventListener('click', function(){
+    closeMoreMenu();
+    changeInventoryCode();
   });
   document.getElementById('menuStockThreshold').addEventListener('click', function(){
     closeMoreMenu();
@@ -4541,15 +4689,18 @@
       archiveBLYear(year).then(function(res){
         if(!res.count){ toast('Aucun BL terminé en ' + year + '.'); return; }
         toast(res.count + ' BL téléchargés (' + year + ')');
-        openConfirm(
-          'Supprimer ces ' + res.count + ' BL de Supabase ?',
-          'Le fichier de ' + year + ' vient d\'être téléchargé — vérifie qu\'il est bien enregistré avant de confirmer. Cette suppression est définitive.',
-          function(){
-            deleteBLYear(res.ids).then(function(){
-              toast(res.count + ' BL supprimés (' + year + ')');
-            }).catch(function(e){ console.error(e); toast('Erreur pendant la suppression — réessaie, rien n\'est perdu.'); });
-          }
-        );
+        askCorrectionPin().then(function(pinOk){
+          if(!pinOk) return;
+          openConfirm(
+            'Supprimer ces ' + res.count + ' BL de Supabase ?',
+            'Le fichier de ' + year + ' vient d\'être téléchargé — vérifie qu\'il est bien enregistré avant de confirmer. Cette suppression est définitive.',
+            function(){
+              deleteBLYear(res.ids).then(function(){
+                toast(res.count + ' BL supprimés (' + year + ')');
+              }).catch(function(e){ console.error(e); toast('Erreur pendant la suppression — réessaie, rien n\'est perdu.'); });
+            }
+          );
+        });
       }).catch(function(e){ console.error(e); toast('Erreur pendant l\'archivage — rien n\'a été supprimé.'); });
     });
   });

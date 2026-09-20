@@ -171,3 +171,20 @@ Le verrou anti-double-prise repose sur une mise à jour conditionnelle
 (`update ... where claimed_by is null`), atomique côté serveur : si deux
 personnes prennent le même BL en même temps, une seule réussit, l'autre
 reçoit 0 ligne modifiée et voit le BL déjà grisé au rafraîchissement suivant.
+
+### Prénoms uniques
+
+Pour éviter que deux personnes choisissent le même prénom (ex. deux
+"Benoit", impossible à distinguer ensuite dans les journaux), chaque
+nouveau prénom est vérifié contre une liste partagée avant d'être accepté :
+
+```sql
+create table public.registered_names (
+  name_key text primary key,   -- normalisé (minuscules, espaces réduits)
+  name_display text not null,  -- tel que tapé, affiché partout
+  created_at timestamptz not null default now()
+);
+```
+
+Sans cette table, le contrôle d'unicité est simplement ignoré (jamais
+bloquant) — chaque appareil garde son prénom tel quel, comme avant.
