@@ -30,6 +30,10 @@ Une seule page HTML/CSS/JS, sans build ni dépendances installées :
 - Hébergement : déployé automatiquement sur
   [Cloudflare Workers](https://developers.cloudflare.com/workers/) à
   chaque push sur `main` (config dans `wrangler.jsonc`)
+- Commandes : file de BL alimentée à la main (parseur) ou automatiquement
+  par `star6000-watcher/` — un petit programme séparé, à installer sur le
+  PC qui fait tourner Star6000, qui capture les BL imprimés et les pousse
+  dans la file sans intervention (voir `star6000-watcher/README.md`)
 
 ## Base de données Supabase
 
@@ -119,12 +123,11 @@ alter publication supabase_realtime add table public.stock_movements;
 Sans cette table, le journal des mouvements reste local à l'appareil
 (pas de partage d'équipe sur l'onglet "Stock").
 
-### TEST LOCAL — File de BL / Commandes (prototype, jamais poussé)
+### File de BL / Commandes
 
-Prototype en cours de test (branche locale uniquement, pas dans l'app livrée)
-pour préparer les commandes depuis un BL Star6000 : file d'attente triée par
+Pour préparer les commandes depuis un BL Star6000 : file d'attente triée par
 départ, verrou anti-double-prise, scan obligatoire de chaque pièce. Deux
-tables, déjà créées sur le projet Supabase pour les tests :
+tables sur le projet Supabase :
 
 ```sql
 create table public.bl_queue (

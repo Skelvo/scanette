@@ -577,7 +577,7 @@
         <p><b>Rotation des références</b> (menu •••) : classe les références par quantité totale sortie en Préparation, pour repérer ce qui part vite (ou pas du tout).</p>
         <p><b>Inventaire annuel</b> (onglet en haut) : scanne d'abord le code-barres d'un rayon — impossible de compter quoi que ce soit avant. Une fois ouvert, il liste tout ce qui doit s'y trouver (via Emplacements) et "Terminer le rayon" reste bloqué tant qu'il en manque. "Voir le rapport global" additionne les rayons terminés et affiche les écarts avec le stock système, exportables ou corrigeables en un clic (code de correction requis).</p>
         <p><b>Prénom</b> : sert à savoir qui a compté quoi (affiché sur les lignes et dans les exports), et à voir qui d'autre a l'app ouverte en même temps. <button id="btnChangeUserName" style="display:inline; background:none; border:none; padding:0; margin:0; font-size:12.5px; font-family:inherit; color:var(--accent); font-weight:700;">Ton prénom : <span id="userNameDisplay">(non défini)</span> — toucher pour changer</button></p>
-        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v67 — 19/09</b></p>
+        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v68 — 20/09</b></p>
       </div>
     </div>
   </div>
@@ -910,7 +910,7 @@
   </div>
 </div>
 
-<!-- TEST LOCAL — Parseur BL Star6000 (jamais poussé, prototype) -->
+<!-- Parseur BL Star6000 (saisie manuelle, en attendant la capture automatique) -->
 <div class="modal-backdrop" id="blParserModal">
   <div class="sheet" style="max-height:92vh;">
     <div class="sheet-head"><h2>Ajouter un BL</h2><button class="row-icon-btn" id="btnCloseBLParserX" title="Fermer">✕</button></div>
@@ -930,7 +930,7 @@
   </div>
 </div>
 
-<!-- TEST LOCAL — File d'attente Commandes + écran de préparation (jamais poussé) -->
+<!-- File d'attente Commandes + écran de préparation -->
 <style>
   /* z-index sous #scanOverlay (150) et .modal-backdrop (180) : la caméra et
      les fenêtres de saisie de l'app doivent rester au-dessus de cet écran. */
@@ -1656,14 +1656,13 @@
       .then(function(res){ if(res.error) console.error(res.error); });
   }
 
-  /* ================= File de BL partagée (Supabase) — TEST LOCAL =================
+  /* ================= File de BL partagée (Supabase) =================
      Table "bl_queue" : chaque commande à préparer, son statut, et qui l'a
      prise en charge (verrou anti-double-prise, via une mise à jour
      conditionnelle "claimed_by is null" — atomique côté serveur, donc deux
      appareils qui prennent le même BL en même temps ne peuvent pas gagner
      tous les deux). Table "bl_events" : journal en ajout seul de qui a fait
-     quoi sur quel BL et à quelle heure, pour l'historique/audit journalier.
-     Jamais poussé : lu et écrit uniquement par le prototype Commandes. */
+     quoi sur quel BL et à quelle heure, pour l'historique/audit journalier. */
   var sharedBLQueue = {}; // { id: row }
   var blQueueChangeCb = null;
   async function refetchBLQueue(){
@@ -4061,7 +4060,7 @@
   /* ================= Stock — journal des mouvements ================= */
   var ledgerFilterText = '';
   var LEDGER_MOVEMENTS_MAX_ROWS = 150;
-  var MOVEMENT_TYPE_LABELS = { reception: 'Réception', prep: 'Préparation', correction: 'Correction', annulation: 'Suppression', renommage: 'Renommage', inventaire: 'Inventaire', commande: 'Commande (TEST)' };
+  var MOVEMENT_TYPE_LABELS = { reception: 'Réception', prep: 'Préparation', correction: 'Correction', annulation: 'Suppression', renommage: 'Renommage', inventaire: 'Inventaire', commande: 'Commande' };
   function lowStockRefs(){
     return Object.keys(stock)
       .filter(function(r){ return stock[r] <= lowStockThreshold; })
@@ -4494,10 +4493,11 @@
     document.getElementById('historyModal').classList.remove('show');
   });
 
-  /* ================= TEST LOCAL — pont vers le prototype Commandes ================= */
-  // Expose le strict nécessaire pour que le prototype "Commandes" (autre
-  // portée JS, plus bas dans le fichier) puisse déclencher le vrai scanner
-  // caméra et le retour visuel — jamais poussé, prototype uniquement.
+  /* ================= Pont vers la partie Commandes ================= */
+  // Expose le strict nécessaire pour que la partie "Commandes" (autre
+  // portée JS, plus bas dans le fichier, isolée pour éviter les collisions
+  // de variables) puisse déclencher le vrai scanner caméra et le retour
+  // visuel de l'app principale.
   window.__blStartScan = function(){ scanPurpose = 'commande'; startScan(); };
   window.__blFlashScan = flashScan;
   window.__blAskInput = askInput;
@@ -4531,10 +4531,10 @@
 </script>
 
 <!-- ═══════════════════════════════════════════════════
-     TEST LOCAL — Prototype parseur BL Star6000
-     Jamais poussé ni fusionné. Isolé de l'app principale.
-     Client list copiée depuis l'appli "Départs Livraison"
-     (lecture seule, rien n'est écrit dans cette autre appli).
+     Commandes — parseur de BL Star6000 + file de préparation
+     Isolé de l'app principale (portée JS séparée). Client list copiée
+     depuis l'appli "Départs Livraison" (lecture seule, rien n'est écrit
+     dans cette autre appli).
 ════════════════════════════════════════════════════ -->
 <script>
 (function(){
@@ -5009,60 +5009,14 @@
     return getBLList().find(function(b){ return b.id === id; }) || null;
   }
 
+  // Les BL de démo (utilisés pendant les tests pour vérifier l'affichage,
+  // le scan et le verrou anti-double-prise sans données réelles) ont été
+  // retirés une fois le système validé en conditions réelles. Le support
+  // du flag isDemo reste dans le code (inoffensif, jamais déclenché tant
+  // que cette liste est vide) au cas où il soit utile de le réactiver un
+  // jour pour une démonstration.
   function buildDemoQueue(){
-    var now = Date.now();
-    function inMin(m){ return now + m * 60000; }
-    // Références et codes-barres RÉELS du catalogue Scanette, pour pouvoir
-    // tester avec de vraies pièces en main — mais marqués isDemo, donc
-    // aucun impact sur le stock à la validation.
-    return [
-      {
-        id: 'demo1', docNumber: '2298410', client: 'MECA MAWI', refCommande: 'TWINGO EG658GT',
-        departureAt: inMin(8), status: 'pending', isDemo: true,
-        items: [
-          { ref: 'TC1352', barcode: '5012759350348', designation: 'BIELLETTE DE BARRE STABILISATRICE', qtyRequired: 1, qtyDone: 0 },
-          { ref: 'TC1353', barcode: '5012759350355', designation: 'BIELLETTE DE BARRE STABILISATRICE', qtyRequired: 1, qtyDone: 0 },
-          { ref: 'NST6116', barcode: '5056197291306', designation: 'ROTULE DE DIRECTION', qtyRequired: 1, qtyDone: 0 },
-          { ref: 'SM1504', barcode: '4909500378045', designation: 'RENAULT CLIO I. TWINGO AV', qtyRequired: 2, qtyDone: 0 },
-          { ref: '913237', barcode: '4909500629260', designation: 'RENAULT KANGOO AV', qtyRequired: 1, qtyDone: 0 }
-        ]
-      },
-      {
-        id: 'demo2', docNumber: '2298415', client: 'Xabi Meca', refCommande: 'CLIO III BF204XY',
-        departureAt: inMin(25), status: 'pending', isDemo: true,
-        items: [
-          { ref: '333724', barcode: '4909500541548', designation: 'RENAULT TWINGO AVG', qtyRequired: 2, qtyDone: 0 },
-          { ref: '333723', barcode: '4909500541524', designation: 'RENAULT TWINGO AVD', qtyRequired: 1, qtyDone: 0 },
-          { ref: 'K2608', barcode: '3599771885598', designation: 'KIT/ETANCHEITE CB RENAULT', qtyRequired: 1, qtyDone: 0 }
-        ]
-      },
-      {
-        id: 'demo3', docNumber: '2298421', client: 'AG Auto 64', refCommande: 'KANGOO DR847ZT',
-        departureAt: inMin(110), status: 'pending', isDemo: true,
-        items: [
-          { ref: '1090', barcode: '3521750010905', designation: 'KIT S. R9-R11-R19-R21-CLIO', qtyRequired: 1, qtyDone: 0 },
-          { ref: '026213P', barcode: '3358960262134', designation: 'JCCULA RNLT CLIO 1 D7F', qtyRequired: 1, qtyDone: 0 },
-          { ref: 'NSU3000', barcode: '5056599452725', designation: 'SOUFFLET UNIVERSEL DE TRANSMISSION', qtyRequired: 2, qtyDone: 0 }
-        ]
-      },
-      {
-        id: 'demo4', docNumber: '2298398', client: 'Barnetche', refCommande: 'MEGANE CS221AA',
-        departureAt: inMin(180), status: 'ready', isDemo: true,
-        items: [
-          { ref: '910068', barcode: '4909500833728', designation: 'RENAULT CLIO II AR', qtyRequired: 1, qtyDone: 1 }
-        ]
-      },
-      // Démo du verrou anti-double-prise : ce BL est déjà pris par "Julien"
-      // dès le chargement, pour voir tout de suite le grisage + le blocage
-      // au clic sans avoir besoin d'un deuxième appareil connecté.
-      {
-        id: 'demo5', docNumber: '2298440', client: 'Auto Sport', refCommande: 'CLIO IV FH901BB',
-        departureAt: inMin(15), status: 'claimed', claimedBy: 'Julien', isDemo: true,
-        items: [
-          { ref: 'K2608', barcode: '3599771885598', designation: 'KIT/ETANCHEITE CB RENAULT', qtyRequired: 1, qtyDone: 0 }
-        ]
-      }
-    ];
+    return [];
   }
 
   function blFormatCountdown(departureAt){
