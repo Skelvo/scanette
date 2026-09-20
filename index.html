@@ -581,7 +581,7 @@
         <p><b>Rotation des références</b> (menu •••) : classe les références par quantité totale sortie en Préparation, pour repérer ce qui part vite (ou pas du tout).</p>
         <p><b>Inventaire annuel</b> (onglet en haut) : scanne d'abord le code-barres d'un rayon — impossible de compter quoi que ce soit avant. Une fois ouvert, il liste tout ce qui doit s'y trouver (via Emplacements) et "Terminer le rayon" reste bloqué tant qu'il en manque. "Voir le rapport global" additionne les rayons terminés et affiche les écarts avec le stock système, exportables ou corrigeables en un clic (code de correction requis).</p>
         <p><b>Prénom</b> : sert à savoir qui a compté quoi (affiché sur les lignes et dans les exports), et à voir qui d'autre a l'app ouverte en même temps. <button id="btnChangeUserName" style="display:inline; background:none; border:none; padding:0; margin:0; font-size:12.5px; font-family:inherit; color:var(--accent); font-weight:700;">Ton prénom : <span id="userNameDisplay">(non défini)</span> — toucher pour changer</button></p>
-        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v71 — 20/09</b></p>
+        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v72 — 20/09</b></p>
       </div>
     </div>
   </div>
@@ -821,6 +821,7 @@
       <button id="menuLocationsExport"><svg class="icon"><use href="#i-file"/></svg> Exporter les emplacements (CSV)</button>
       <button id="menuReorderExport"><svg class="icon"><use href="#i-file"/></svg> Liste de réappro (CSV)</button>
       <button id="menuFullBackup"><svg class="icon"><use href="#i-file"/></svg> Sauvegarde complète (JSON)</button>
+      <button id="menuArchiveBL"><svg class="icon"><use href="#i-file"/></svg> Archiver une année de BL</button>
       <button id="menuRotation"><svg class="icon"><use href="#i-clock"/></svg> Rotation des références</button>
       <button id="menuTheme"><svg class="icon"><use href="#i-theme"/></svg> Thème</button>
       <button id="menuLock"><svg class="icon"><use href="#i-power"/></svg> Verrouiller</button>
@@ -4461,6 +4462,96 @@
     var blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     downloadFile('sauvegarde_scanette_' + new Date().toISOString().slice(0, 10) + '.json', blob);
     toast('Sauvegarde téléchargée');
+  });
+
+  /* ================= Archivage annuel des BL (Supabase) =================
+     Pas une nécessité de place (bl_queue/bl_events sont légers — voir
+     README), mais garder une trace annuelle propre plutôt que de laisser la
+     base grossir indéfiniment. Manuel, jamais automatique : télécharge un
+     JSON avec tous les BL d'une année civile ENTIÈREMENT écoulée + leur
+     journal complet, puis ne supprime de Supabase qu'après confirmation
+     explicite une fois ce fichier téléchargé. */
+  async function fetchAllPages(queryFn, pageSize){
+    pageSize = pageSize || 1000;
+    var all = [];
+    var from = 0;
+    while(true){
+      var res = await queryFn(from, from + pageSize - 1);
+      if(res.error) throw res.error;
+      var rows = res.data || [];
+      all = all.concat(rows);
+      if(rows.length < pageSize) break;
+      from += pageSize;
+    }
+    return all;
+  }
+  function chunkArray(arr, size){
+    var out = [];
+    for(var i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+    return out;
+  }
+  async function archiveBLYear(year){
+    var startIso = new Date(Date.UTC(year, 0, 1)).toISOString();
+    var endIso = new Date(Date.UTC(year + 1, 0, 1)).toISOString();
+    var rows = await fetchAllPages(function(from, to){
+      return db.from('bl_queue').select('*').eq('status', 'ready')
+        .gte('completed_at', startIso).lt('completed_at', endIso)
+        .order('completed_at', { ascending: true }).range(from, to);
+    });
+    if(!rows.length) return { count: 0 };
+    var ids = rows.map(function(r){ return r.id; });
+    var events = [];
+    // Récupéré par lots (bl_id in (...)) : une année peut compter des
+    // centaines/milliers de BL, trop pour une seule requête "IN".
+    var idChunks = chunkArray(ids, 150);
+    for(var i = 0; i < idChunks.length; i++){
+      var chunk = idChunks[i];
+      var chunkEvents = await fetchAllPages(function(from, to){
+        return db.from('bl_events').select('*').in('bl_id', chunk)
+          .order('at', { ascending: true }).range(from, to);
+      });
+      events = events.concat(chunkEvents);
+    }
+    var payload = { exported_at: new Date().toISOString(), year: year, bl_count: rows.length, bl_queue: rows, bl_events: events };
+    var blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    await downloadFile('archive_bl_' + year + '.json', blob);
+    return { count: rows.length, ids: ids };
+  }
+  async function deleteBLYear(ids){
+    var idChunks = chunkArray(ids, 150);
+    for(var i = 0; i < idChunks.length; i++){
+      var chunk = idChunks[i];
+      var r1 = await db.from('bl_events').delete().in('bl_id', chunk);
+      if(r1.error) throw r1.error;
+      var r2 = await db.from('bl_queue').delete().in('id', chunk);
+      if(r2.error) throw r2.error;
+      chunk.forEach(function(id){ delete sharedBLQueue[id]; });
+    }
+    if(blQueueChangeCb) blQueueChangeCb();
+  }
+  document.getElementById('menuArchiveBL').addEventListener('click', function(){
+    closeMoreMenu();
+    if(!db){ toast('Nécessite une connexion.'); return; }
+    var thisYear = new Date().getFullYear();
+    askInput('Archiver quelle année ? (BL terminés, année civile entièrement écoulée)', String(thisYear - 1), 'numeric').then(function(val){
+      if(val === null) return;
+      var year = parseInt(val, 10);
+      if(isNaN(year) || year >= thisYear){ toast('Choisis une année complète, avant ' + thisYear + '.'); return; }
+      toast('Recherche des BL de ' + year + '…');
+      archiveBLYear(year).then(function(res){
+        if(!res.count){ toast('Aucun BL terminé en ' + year + '.'); return; }
+        toast(res.count + ' BL téléchargés (' + year + ')');
+        openConfirm(
+          'Supprimer ces ' + res.count + ' BL de Supabase ?',
+          'Le fichier de ' + year + ' vient d\'être téléchargé — vérifie qu\'il est bien enregistré avant de confirmer. Cette suppression est définitive.',
+          function(){
+            deleteBLYear(res.ids).then(function(){
+              toast(res.count + ' BL supprimés (' + year + ')');
+            }).catch(function(e){ console.error(e); toast('Erreur pendant la suppression — réessaie, rien n\'est perdu.'); });
+          }
+        );
+      }).catch(function(e){ console.error(e); toast('Erreur pendant l\'archivage — rien n\'a été supprimé.'); });
+    });
   });
 
   /* ================= Historique ================= */
