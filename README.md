@@ -30,6 +30,10 @@ Une seule page HTML/CSS/JS, sans build ni dépendances installées :
 - Hébergement : déployé automatiquement sur
   [Cloudflare Workers](https://developers.cloudflare.com/workers/) à
   chaque push sur `main` (config dans `wrangler.jsonc`)
+- Commandes : file de BL alimentée à la main (parseur) ou automatiquement
+  par `star6000-watcher/` — un petit programme séparé, à installer sur le
+  PC qui fait tourner Star6000, qui capture les BL imprimés et les pousse
+  dans la file sans intervention (voir `star6000-watcher/README.md`)
 
 ## Base de données Supabase
 
@@ -118,3 +122,52 @@ alter publication supabase_realtime add table public.stock_movements;
 
 Sans cette table, le journal des mouvements reste local à l'appareil
 (pas de partage d'équipe sur l'onglet "Stock").
+
+### File de BL / Commandes
+
+Pour préparer les commandes depuis un BL Star6000 : file d'attente triée par
+départ, verrou anti-double-prise, scan obligatoire de chaque pièce. Deux
+tables sur le projet Supabase :
+
+```sql
+create table public.bl_queue (
+  id text primary key,
+  doc_number text,
+  doc_date text,
+  client text,
+  ref_commande text,
+  garage_name text,
+  carrier_label text,
+  departure_at timestamptz,
+  status text not null default 'pending', -- pending | claimed | ready
+  claimed_by text,
+  claimed_at timestamptz,
+  items jsonb not null default '[]'::jsonb,
+  created_by text,
+  created_at timestamptz not null default now(),
+  completed_by text,
+  completed_at timestamptz,
+  updated_at timestamptz not null default now()
+);
+
+alter publication supabase_realtime add table public.bl_queue;
+
+-- Journal en ajout seul : qui a fait quoi sur quel BL, à quelle heure
+-- (créé, pris, relâché, pièce scannée, terminé) — historique/audit.
+create table public.bl_events (
+  id text primary key,
+  bl_id text not null,
+  doc_number text,
+  event_type text not null,
+  actor text,
+  detail jsonb,
+  at timestamptz not null default now()
+);
+create index on public.bl_events (bl_id);
+create index on public.bl_events (at desc);
+```
+
+Le verrou anti-double-prise repose sur une mise à jour conditionnelle
+(`update ... where claimed_by is null`), atomique côté serveur : si deux
+personnes prennent le même BL en même temps, une seule réussit, l'autre
+reçoit 0 ligne modifiée et voit le BL déjà grisé au rafraîchissement suivant.
