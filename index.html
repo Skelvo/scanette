@@ -1666,7 +1666,7 @@
      Jamais poussé : lu et écrit uniquement par le prototype Commandes. */
   var sharedBLQueue = {}; // { id: row }
   var blQueueChangeCb = null;
-  async function initSharedBLQueue(){
+  async function refetchBLQueue(){
     if(!db) return;
     try{
       var openRes = await db.from('bl_queue').select('*').neq('status', 'ready');
@@ -1679,7 +1679,11 @@
       sharedBLQueue = {};
       (openRes.data || []).concat(readyRes.data || []).forEach(function(row){ sharedBLQueue[row.id] = row; });
       if(blQueueChangeCb) blQueueChangeCb();
-    }catch(e){ console.error(e); return; }
+    }catch(e){ console.error(e); }
+  }
+  async function initSharedBLQueue(){
+    if(!db) return;
+    await refetchBLQueue();
 
     db.channel('bl-queue-changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'bl_queue' }, function(payload){
@@ -1690,6 +1694,15 @@
         if(blQueueChangeCb) blQueueChangeCb();
       })
       .subscribe();
+
+    // Un téléphone qui s'éteint/se met en arrière-plan coupe la connexion
+    // temps réel ; le navigateur ne rattrape pas forcément tout seul ce qui
+    // a changé pendant la coupure. Dès que l'onglet redevient visible, on
+    // relit tout pour être sûr d'être à jour, plutôt que d'attendre un
+    // rechargement manuel de la page.
+    document.addEventListener('visibilitychange', function(){
+      if(document.visibilityState === 'visible') refetchBLQueue();
+    });
   }
   function logBLEvent(blId, docNumber, eventType, detail){
     if(!db) return;
