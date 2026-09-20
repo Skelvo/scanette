@@ -949,9 +949,11 @@
   .blq-card.urgent { border-left-color:var(--danger); animation:blqPulse 1.1s infinite; }
   .blq-card.soon { border-left-color:var(--accent); }
   .blq-card.ready { border-left-color:var(--success); opacity:.6; }
-  .blq-card.claimed { border-left-color:var(--text-dim); opacity:.55; filter:grayscale(.6); cursor:not-allowed; }
+  .blq-card.claimed { border-left-color:var(--text-dim); cursor:not-allowed; flex-direction:column; align-items:stretch; gap:10px; }
   .blq-card.claimed:active { transform:none; }
-  .blq-badge-claimed { display:inline-block; background:rgba(150,150,150,0.18); color:var(--text-dim); border:1px solid var(--text-dim); border-radius:4px; padding:1px 6px; font-size:9px; letter-spacing:.5px; margin-left:6px; vertical-align:middle; }
+  .blq-claimed-row { display:flex; align-items:center; gap:14px; }
+  .blq-card.claimed .blq-claimed-row { opacity:.5; filter:grayscale(.6); }
+  .blq-claimed-banner { text-align:center; font-size:14px; font-weight:700; color:var(--text); background:rgba(150,150,150,0.16); border:1px solid var(--text-dim); border-radius:8px; padding:9px 10px; }
   @keyframes blqPulse { 0%,100%{ background:var(--surface); } 50%{ background:rgba(221,91,77,0.14); } }
   .blq-main { flex:1; min-width:0; }
   .blq-client { font-weight:800; font-size:16px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -5036,6 +5038,16 @@
         items: [
           { ref: '910068', barcode: '4909500833728', designation: 'RENAULT CLIO II AR', qtyRequired: 1, qtyDone: 1 }
         ]
+      },
+      // Démo du verrou anti-double-prise : ce BL est déjà pris par "Julien"
+      // dès le chargement, pour voir tout de suite le grisage + le blocage
+      // au clic sans avoir besoin d'un deuxième appareil connecté.
+      {
+        id: 'demo5', docNumber: '2298440', client: 'Auto Sport', refCommande: 'CLIO IV FH901BB',
+        departureAt: inMin(15), status: 'claimed', claimedBy: 'Julien', isDemo: true,
+        items: [
+          { ref: 'K2608', barcode: '3599771885598', designation: 'KIT/ETANCHEITE CB RENAULT', qtyRequired: 1, qtyDone: 0 }
+        ]
       }
     ];
   }
@@ -5072,16 +5084,20 @@
     sorted.forEach(function(bl){
       var cd = blFormatCountdown(bl.departureAt);
       var isReady = bl.status === 'ready';
-      var isClaimedByOther = !isReady && !bl.isDemo && bl.claimedBy && bl.claimedBy !== me;
+      var isClaimedByOther = !isReady && bl.claimedBy && bl.claimedBy !== me;
       var match = matchGarage(bl.client, GARAGES_DATA);
       var confident = match && match.score >= MATCH_CONFIDENCE_THRESHOLD;
       var doneLines = bl.items.filter(function(it){ return it.qtyDone === it.qtyRequired; }).length;
       html += '<div class="blq-card ' + (isReady ? 'ready' : (isClaimedByOther ? 'claimed' : cd.cls)) + '" data-id="' + bl.id + '">';
-      html += '<div class="blq-main"><div class="blq-client">' + blEscapeHtml(bl.client) + (confident ? '' : '<span class="blq-badge-unmatched">⚠ non identifié</span>') + (bl.isDemo ? '<span class="blq-badge-unmatched" style="background:rgba(214,138,63,0.15); color:var(--accent); border-color:var(--accent);">démo</span>' : '') + (isClaimedByOther ? '<span class="blq-badge-claimed">' + blEscapeHtml(bl.claimedBy) + ' prépare</span>' : '') + '</div>';
+      html += '<div class="blq-claimed-row">';
+      html += '<div class="blq-main"><div class="blq-client">' + blEscapeHtml(bl.client) + (confident ? '' : '<span class="blq-badge-unmatched">⚠ non identifié</span>') + (bl.isDemo ? '<span class="blq-badge-unmatched" style="background:rgba(214,138,63,0.15); color:var(--accent); border-color:var(--accent);">démo</span>' : '') + '</div>';
       html += '<div class="blq-meta">' + blEscapeHtml(bl.docNumber) + ' · ' + blEscapeHtml(bl.refCommande || '') + ' · ' + doneLines + '/' + bl.items.length + ' ligne(s)' + (bl.carrierLabel ? ' · ' + blEscapeHtml(bl.carrierLabel) : '') + '</div></div>';
       html += '<div class="blq-count"><div class="blq-countdown ' + (isReady ? 'done' : cd.cls) + '">' + (isReady ? '✓ prêt' : cd.label) + '</div>';
       if (!isReady) html += '<div class="blq-dep-label">départ</div>';
-      html += '</div></div>';
+      html += '</div>';
+      html += '</div>';
+      if (isClaimedByOther) html += '<div class="blq-claimed-banner">🔒 <b>' + blEscapeHtml(bl.claimedBy) + '</b> est en train de le préparer</div>';
+      html += '</div>';
     });
     wrap.innerHTML = html;
   }
@@ -5098,13 +5114,13 @@
     var card = e.target.closest('.blq-card'); if (!card) return;
     var bl = findBLById(card.getAttribute('data-id'));
     if (!bl) return;
-    if (bl.status === 'ready' || bl.isDemo) { openBLPicking(bl); return; }
+    if (bl.status === 'ready') { openBLPicking(bl); return; }
     var me = currentUserName();
     if (bl.claimedBy && bl.claimedBy !== me) {
       if (window.__blToast) window.__blToast(bl.claimedBy + ' est en train de le préparer');
       return;
     }
-    if (!window.__blClaim) { openBLPicking(bl); return; }
+    if (bl.isDemo || !window.__blClaim) { openBLPicking(bl); return; }
     window.__blClaim(bl.id).then(function(res){
       if (!res.ok) {
         renderBLQueue();
