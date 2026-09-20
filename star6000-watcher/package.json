@@ -1,0 +1,13 @@
+{
+  "name": "star6000-bl-watcher",
+  "version": "1.0.0",
+  "description": "Surveille un dossier (imprimante virtuelle PDFCreator) pour capturer automatiquement les BL Star6000 et les pousser dans la file Scanette (Supabase).",
+  "main": "watcher.js",
+  "scripts": {
+    "start": "node watcher.js"
+  },
+  "dependencies": {
+    "chokidar": "^3.6.0",
+    "pdf-parse": "^1.1.1"
+  }
+}
