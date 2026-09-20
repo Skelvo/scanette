@@ -118,3 +118,53 @@ alter publication supabase_realtime add table public.stock_movements;
 
 Sans cette table, le journal des mouvements reste local à l'appareil
 (pas de partage d'équipe sur l'onglet "Stock").
+
+### TEST LOCAL — File de BL / Commandes (prototype, jamais poussé)
+
+Prototype en cours de test (branche locale uniquement, pas dans l'app livrée)
+pour préparer les commandes depuis un BL Star6000 : file d'attente triée par
+départ, verrou anti-double-prise, scan obligatoire de chaque pièce. Deux
+tables, déjà créées sur le projet Supabase pour les tests :
+
+```sql
+create table public.bl_queue (
+  id text primary key,
+  doc_number text,
+  doc_date text,
+  client text,
+  ref_commande text,
+  garage_name text,
+  carrier_label text,
+  departure_at timestamptz,
+  status text not null default 'pending', -- pending | claimed | ready
+  claimed_by text,
+  claimed_at timestamptz,
+  items jsonb not null default '[]'::jsonb,
+  created_by text,
+  created_at timestamptz not null default now(),
+  completed_by text,
+  completed_at timestamptz,
+  updated_at timestamptz not null default now()
+);
+
+alter publication supabase_realtime add table public.bl_queue;
+
+-- Journal en ajout seul : qui a fait quoi sur quel BL, à quelle heure
+-- (créé, pris, relâché, pièce scannée, terminé) — historique/audit.
+create table public.bl_events (
+  id text primary key,
+  bl_id text not null,
+  doc_number text,
+  event_type text not null,
+  actor text,
+  detail jsonb,
+  at timestamptz not null default now()
+);
+create index on public.bl_events (bl_id);
+create index on public.bl_events (at desc);
+```
+
+Le verrou anti-double-prise repose sur une mise à jour conditionnelle
+(`update ... where claimed_by is null`), atomique côté serveur : si deux
+personnes prennent le même BL en même temps, une seule réussit, l'autre
+reçoit 0 ligne modifiée et voit le BL déjà grisé au rafraîchissement suivant.

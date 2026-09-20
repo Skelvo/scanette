@@ -615,8 +615,36 @@
   <div id="prepView" style="display:none;">
     <div id="prepMainView">
       <div class="panel">
-        <h2 style="margin:0 0 4px; font-size:16px;">Préparation de commande</h2>
-        <p class="sub" style="margin:0 0 14px;">Scanne ce que tu prélèves : ça retire directement du stock partagé, sans passer par une feuille de fournisseur.</p>
+        <div style="display:flex; align-items:baseline; justify-content:space-between; gap:10px;">
+          <h2 style="margin:0 0 4px; font-size:16px;">Commandes à préparer</h2>
+          <span class="blq-sub" id="blqSub">—</span>
+        </div>
+        <p class="sub" style="margin:0 0 12px;">Les départs les plus proches en premier. Scanne chaque pièce pour valider un BL.</p>
+        <div class="blq-legend" style="padding:0 0 10px;">
+          <span><span class="dot" style="background:var(--danger);"></span> ≤ 10 min</span>
+          <span><span class="dot" style="background:var(--accent);"></span> ≤ 30 min</span>
+          <span><span class="dot" style="background:var(--text-dim);"></span> plus tard</span>
+          <span><span class="dot" style="background:var(--success);"></span> prêt</span>
+        </div>
+        <button class="btn-primary" id="btnAddBL" style="margin-top:0;"><svg class="icon"><use href="#i-plus"/></svg> Ajouter un BL</button>
+        <button class="btn-secondary" id="btnPrepDirect">Retrait sans BL (dépannage)</button>
+      </div>
+
+      <div id="blqList"></div>
+
+      <div class="panel">
+        <div class="help-toggle" id="anomaliesToggle">
+          <b style="font-size:13px;">Anomalies de stock</b>
+          <span class="anomaly-badge" id="anomalyBadge" style="display:none;">0</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="prepDirectView" style="display:none;">
+      <button class="btn-secondary" id="btnBackToPrepFromDirect" style="margin-bottom:12px;">← Retour aux commandes</button>
+      <div class="panel">
+        <h2 style="margin:0 0 4px; font-size:16px;">Retrait sans BL</h2>
+        <p class="sub" style="margin:0 0 14px;">Pour un dépannage ou une sortie exceptionnelle : ça retire directement du stock partagé, sans commande rattachée.</p>
         <div class="scan-row">
           <button class="btn-scan" id="btnPrepScan" style="background:var(--danger);"><svg class="icon icon-fill"><use href="#i-play"/></svg>&nbsp;SCANNER UN RETRAIT</button>
           <div class="stepper">
@@ -626,13 +654,6 @@
           </div>
         </div>
         <button class="btn-secondary" id="btnPrepManualRef" style="margin-top:10px;">Taper la référence à la main</button>
-      </div>
-
-      <div class="panel">
-        <div class="help-toggle" id="anomaliesToggle">
-          <b style="font-size:13px;">Anomalies de stock</b>
-          <span class="anomaly-badge" id="anomalyBadge" style="display:none;">0</span>
-        </div>
       </div>
 
       <div class="last-action-bar" id="prepLastActionBar" style="position:static; display:none; max-width:none; margin:0 0 12px;">
@@ -886,6 +907,94 @@
     <button class="btn-secondary" id="btnExportInventoryReport"><svg class="icon"><use href="#i-file"/></svg> Exporter le rapport (CSV)</button>
     <button class="btn-primary" id="btnApplyInventoryCorrections">Appliquer les corrections au stock</button>
     <button class="btn-secondary" id="btnCloseInventoryReport">Fermer</button>
+  </div>
+</div>
+
+<!-- TEST LOCAL — Parseur BL Star6000 (jamais poussé, prototype) -->
+<div class="modal-backdrop" id="blParserModal">
+  <div class="sheet" style="max-height:92vh;">
+    <div class="sheet-head"><h2>Ajouter un BL</h2><button class="row-icon-btn" id="btnCloseBLParserX" title="Fermer">✕</button></div>
+    <p class="sub">En attendant la récupération automatique depuis le Star6000 : colle le texte du bon de livraison, vérifie ce qui a été lu, puis mets-le dans la file de préparation.</p>
+    <div class="admin-field">
+      <label>Texte du BL (collé)</label>
+      <textarea id="blParserTextInput" rows="8" style="width:100%; background:var(--surface2); border:1px solid var(--border); border-radius:3px; padding:10px 12px; color:var(--text); font-family:var(--font-mono); font-size:12px;" placeholder="Colle ici le texte brut du bon de livraison..."></textarea>
+    </div>
+    <div class="admin-field">
+      <label>Client (tel qu'écrit sur le BL)</label>
+      <input class="field" id="blParserClientInput" placeholder="Ex: MECA MAWI">
+    </div>
+    <button class="btn-secondary" id="btnRunBLParser" style="margin-top:0;">Vérifier ce qui est lu</button>
+    <div id="blParserResult" style="margin-top:14px;"></div>
+    <button class="btn-primary" id="btnQueueBL">Mettre dans la file de préparation</button>
+    <button class="btn-secondary" id="btnCloseBLParser">Annuler</button>
+  </div>
+</div>
+
+<!-- TEST LOCAL — File d'attente Commandes + écran de préparation (jamais poussé) -->
+<style>
+  /* z-index sous #scanOverlay (150) et .modal-backdrop (180) : la caméra et
+     les fenêtres de saisie de l'app doivent rester au-dessus de cet écran. */
+  #blPickingOverlay { display:none; position:fixed; inset:0; z-index:120; background:var(--bg); overflow-y:auto; }
+  #blPickingOverlay.show { display:block; }
+  .blq-header { position:sticky; top:0; background:var(--surface); border-bottom:3px solid var(--accent); padding:14px 16px; display:flex; align-items:center; justify-content:space-between; z-index:5; }
+  .blq-title { font-weight:800; font-size:17px; }
+  .blq-sub { font-family:var(--font-mono); font-size:10px; color:var(--text-dim); margin-top:2px; letter-spacing:.5px; }
+  .blq-close { background:none; border:1px solid var(--border); color:var(--text-dim); width:32px; height:32px; border-radius:6px; font-size:16px; flex-shrink:0; }
+  #blqList { display:flex; flex-direction:column; gap:10px; margin-bottom:12px; }
+  .blq-legend { display:flex; gap:14px; font-family:var(--font-mono); font-size:10px; color:var(--text-dim); flex-wrap:wrap; }
+  .blq-legend span { display:inline-flex; align-items:center; gap:5px; }
+  .blq-legend .dot { width:8px; height:8px; border-radius:50%; }
+  .blq-card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px 16px; display:flex; align-items:center; gap:14px; border-left:5px solid var(--border); cursor:pointer; transition:transform .1s; }
+  .blq-card:active { transform:scale(0.98); }
+  .blq-card.urgent { border-left-color:var(--danger); animation:blqPulse 1.1s infinite; }
+  .blq-card.soon { border-left-color:var(--accent); }
+  .blq-card.ready { border-left-color:var(--success); opacity:.6; }
+  .blq-card.claimed { border-left-color:var(--text-dim); opacity:.55; filter:grayscale(.6); cursor:not-allowed; }
+  .blq-card.claimed:active { transform:none; }
+  .blq-badge-claimed { display:inline-block; background:rgba(150,150,150,0.18); color:var(--text-dim); border:1px solid var(--text-dim); border-radius:4px; padding:1px 6px; font-size:9px; letter-spacing:.5px; margin-left:6px; vertical-align:middle; }
+  @keyframes blqPulse { 0%,100%{ background:var(--surface); } 50%{ background:rgba(221,91,77,0.14); } }
+  .blq-main { flex:1; min-width:0; }
+  .blq-client { font-weight:800; font-size:16px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .blq-badge-unmatched { display:inline-block; background:rgba(221,91,77,0.15); color:var(--danger); border:1px solid var(--danger); border-radius:4px; padding:1px 6px; font-size:9px; letter-spacing:.5px; margin-left:6px; vertical-align:middle; }
+  .blq-meta { font-family:var(--font-mono); font-size:11px; color:var(--text-dim); margin-top:3px; }
+  .blq-count { text-align:right; flex-shrink:0; }
+  .blq-countdown { font-family:var(--font-mono); font-weight:800; font-size:26px; line-height:1; }
+  .blq-countdown.urgent { color:var(--danger); }
+  .blq-countdown.soon { color:var(--accent); }
+  .blq-countdown.calm { color:var(--text-dim); }
+  .blq-countdown.done { color:var(--success); font-size:15px; }
+  .blq-dep-label { font-family:var(--font-mono); font-size:9px; color:var(--text-dim); letter-spacing:1px; text-transform:uppercase; margin-top:2px; }
+
+  .blp-progress { position:sticky; top:57px; background:var(--surface); padding:10px 16px; font-family:var(--font-mono); font-size:12px; border-bottom:1px solid var(--border); z-index:4; }
+  .blp-list { padding:12px 16px 110px; max-width:640px; margin:0 auto; display:flex; flex-direction:column; gap:8px; }
+  .blp-row { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:12px 14px; }
+  .blp-row.ok { border-color:var(--success); background:rgba(63,174,107,0.08); }
+  .blp-row.over { border-color:var(--danger); background:rgba(221,91,77,0.08); }
+  .blp-row-top { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  .blp-ref { font-weight:700; font-size:13px; }
+  .blp-desig { font-size:12px; color:var(--text-dim); margin-top:2px; }
+  .blp-qty { font-family:var(--font-mono); font-weight:800; font-size:22px; flex-shrink:0; }
+  .blp-qty .req { color:var(--text-dim); font-size:13px; }
+  .blp-row-actions { display:flex; gap:8px; margin-top:8px; }
+  .blp-row-actions button { flex:1; margin-top:0; padding:7px; font-size:12px; }
+  .blp-footer { position:fixed; bottom:0; left:0; right:0; background:var(--surface); border-top:1px solid var(--border); padding:12px 16px; max-width:640px; margin:0 auto; }
+</style>
+<div id="blPickingOverlay">
+  <div class="blq-header">
+    <div>
+      <div class="blq-title" id="blpClient">—</div>
+      <div class="blq-sub" id="blpMeta">—</div>
+    </div>
+    <button class="blq-close" id="btnCloseBLPicking">✕</button>
+  </div>
+  <div class="blp-progress" id="blpProgress">—</div>
+  <div style="padding:12px 16px 0; max-width:640px; margin:0 auto;">
+    <button class="btn-scan" id="btnCommandeScan" style="width:100%;">📷 SCANNER UNE PIÈCE</button>
+    <div id="blScanFeedback" style="display:none; margin-top:8px; padding:8px 12px; border-radius:6px; font-family:var(--font-mono); font-size:12px; font-weight:700;"></div>
+  </div>
+  <div class="blp-list" id="blpList"></div>
+  <div class="blp-footer">
+    <button class="btn-primary" id="btnValidateBL" style="margin-top:0;" disabled>Valider le BL</button>
   </div>
 </div>
 
@@ -1223,6 +1332,7 @@
       initSharedAnomalies();
       initSharedStockMovements();
       initSharedCorrectionPin();
+      initSharedBLQueue();
     }catch(e){
       console.error(e);
       db = null;
@@ -1542,6 +1652,111 @@
     // possible pour celles-là tant qu'elles n'ont pas été synchronisées.
     db.from('stock_anomalies').update({ resolved: true }).eq('id', id)
       .then(function(res){ if(res.error) console.error(res.error); });
+  }
+
+  /* ================= File de BL partagée (Supabase) — TEST LOCAL =================
+     Table "bl_queue" : chaque commande à préparer, son statut, et qui l'a
+     prise en charge (verrou anti-double-prise, via une mise à jour
+     conditionnelle "claimed_by is null" — atomique côté serveur, donc deux
+     appareils qui prennent le même BL en même temps ne peuvent pas gagner
+     tous les deux). Table "bl_events" : journal en ajout seul de qui a fait
+     quoi sur quel BL et à quelle heure, pour l'historique/audit journalier.
+     Jamais poussé : lu et écrit uniquement par le prototype Commandes. */
+  var sharedBLQueue = {}; // { id: row }
+  var blQueueChangeCb = null;
+  async function initSharedBLQueue(){
+    if(!db) return;
+    try{
+      var openRes = await db.from('bl_queue').select('*').neq('status', 'ready');
+      if(openRes.error) throw openRes.error;
+      // BL déjà validés : gardés visibles un moment (dernières 24h) pour ne
+      // pas donner l'impression qu'ils ont disparu juste après validation.
+      var readyRes = await db.from('bl_queue').select('*').eq('status', 'ready')
+        .gte('completed_at', new Date(Date.now() - 24*3600*1000).toISOString());
+      if(readyRes.error) throw readyRes.error;
+      sharedBLQueue = {};
+      (openRes.data || []).concat(readyRes.data || []).forEach(function(row){ sharedBLQueue[row.id] = row; });
+      if(blQueueChangeCb) blQueueChangeCb();
+    }catch(e){ console.error(e); return; }
+
+    db.channel('bl-queue-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'bl_queue' }, function(payload){
+        var row = payload.eventType === 'DELETE' ? payload.old : payload.new;
+        if(!row || !row.id) return;
+        if(payload.eventType === 'DELETE') delete sharedBLQueue[row.id];
+        else sharedBLQueue[row.id] = row;
+        if(blQueueChangeCb) blQueueChangeCb();
+      })
+      .subscribe();
+  }
+  function logBLEvent(blId, docNumber, eventType, detail){
+    if(!db) return;
+    db.from('bl_events').insert({
+      id: uid(), bl_id: blId, doc_number: docNumber || null, event_type: eventType,
+      actor: currentUser || null, detail: detail || null, at: new Date().toISOString()
+    }).then(function(res){ if(res.error) console.error(res.error); });
+  }
+  function insertBLRow(row){
+    sharedBLQueue[row.id] = row;
+    if(blQueueChangeCb) blQueueChangeCb();
+    if(!db) return;
+    db.from('bl_queue').insert(row).then(function(res){ if(res.error) console.error(res.error); });
+    logBLEvent(row.id, row.doc_number, 'created', { client: row.client });
+  }
+  // Verrou anti-double-prise : ne réussit que si personne ne l'a déjà pris
+  // (WHERE claimed_by is null, vérifié côté serveur au moment de l'écriture).
+  function claimBLRow(id){
+    var row = sharedBLQueue[id];
+    if(!row) return Promise.resolve({ ok:false, reason:'not-found' });
+    if(row.claimed_by && row.claimed_by !== currentUser){
+      return Promise.resolve({ ok:false, reason:'taken', by: row.claimed_by });
+    }
+    if(!db) return Promise.resolve({ ok:false, reason:'offline' });
+    return db.from('bl_queue')
+      .update({ claimed_by: currentUser || 'Collègue', claimed_at: new Date().toISOString(), status: 'claimed' })
+      .eq('id', id).is('claimed_by', null).select()
+      .then(function(res){
+        if(res.error){ console.error(res.error); return { ok:false, reason:'error' }; }
+        if(!res.data || !res.data.length){
+          // Quelqu'un vient de le prendre entre-temps : on relit la vraie ligne pour l'afficher grisée.
+          return db.from('bl_queue').select('*').eq('id', id).maybeSingle().then(function(r2){
+            if(r2.data){ sharedBLQueue[id] = r2.data; if(blQueueChangeCb) blQueueChangeCb(); }
+            return { ok:false, reason:'taken', by: r2.data ? r2.data.claimed_by : null };
+          });
+        }
+        sharedBLQueue[id] = res.data[0];
+        if(blQueueChangeCb) blQueueChangeCb();
+        logBLEvent(id, row.doc_number, 'claimed', null);
+        return { ok:true, row: res.data[0] };
+      });
+  }
+  function releaseBLRow(id){
+    var row = sharedBLQueue[id];
+    if(!row || row.status === 'ready') return;
+    row.claimed_by = null; row.claimed_at = null; row.status = 'pending';
+    if(blQueueChangeCb) blQueueChangeCb();
+    if(!db) return;
+    db.from('bl_queue').update({ claimed_by:null, claimed_at:null, status:'pending' })
+      .eq('id', id).eq('claimed_by', currentUser || 'Collègue')
+      .then(function(res){ if(res.error) console.error(res.error); });
+    logBLEvent(id, row.doc_number, 'released', null);
+  }
+  function saveBLItems(id, items){
+    var row = sharedBLQueue[id];
+    if(row) row.items = items;
+    if(!db) return;
+    db.from('bl_queue').update({ items: items, updated_at: new Date().toISOString() }).eq('id', id)
+      .then(function(res){ if(res.error) console.error(res.error); });
+  }
+  function completeBLRow(id, items){
+    var row = sharedBLQueue[id];
+    var nowIso = new Date().toISOString();
+    if(row){ row.status = 'ready'; row.items = items; row.completed_by = currentUser || 'Collègue'; row.completed_at = nowIso; row.claimed_by = null; row.claimed_at = null; }
+    if(blQueueChangeCb) blQueueChangeCb();
+    logBLEvent(id, row ? row.doc_number : null, 'completed', null);
+    if(!db) return;
+    db.from('bl_queue').update({ status:'ready', items: items, completed_by: currentUser || 'Collègue', completed_at: nowIso, claimed_by:null, claimed_at:null })
+      .eq('id', id).then(function(res){ if(res.error) console.error(res.error); });
   }
 
   /* ================= Lock / PIN ================= */
@@ -2309,6 +2524,7 @@
     if(scanPurpose === 'prep') handlePrepScannedCode(code);
     else if(scanPurpose === 'inventory') handleInventoryScannedCode(code);
     else if(scanPurpose === 'inventory-shelf') handleInventoryShelfScannedCode(code);
+    else if(scanPurpose === 'commande' && window.__blHandleCommandeScan) window.__blHandleCommandeScan(code);
     else handleScannedCode(code);
   }
 
@@ -2352,6 +2568,7 @@
       if(scanPurpose === 'prep') handlePrepScannedCode(code);
       else if(scanPurpose === 'inventory') handleInventoryScannedCode(code);
       else if(scanPurpose === 'inventory-shelf') handleInventoryShelfScannedCode(code);
+      else if(scanPurpose === 'commande' && window.__blHandleCommandeScan) window.__blHandleCommandeScan(code);
       else handleScannedCode(code);
     });
   });
@@ -3182,10 +3399,13 @@
     document.getElementById('modeTabs').style.display = 'flex';
     document.querySelector('.toolbar').style.display = 'none';
     document.getElementById('anomaliesView').style.display = 'none';
+    document.getElementById('prepDirectView').style.display = 'none';
     document.getElementById('prepMainView').style.display = 'block';
     prepStep = 1;
     renderPrepStep();
     renderPrepSession();
+    if(window.__blRenderQueue) window.__blRenderQueue();
+    if(window.__blStartQueueTicker) window.__blStartQueueTicker(true);
     window.scrollTo(0, 0);
     setModeTab('prep');
   }
@@ -3826,7 +4046,7 @@
   /* ================= Stock — journal des mouvements ================= */
   var ledgerFilterText = '';
   var LEDGER_MOVEMENTS_MAX_ROWS = 150;
-  var MOVEMENT_TYPE_LABELS = { reception: 'Réception', prep: 'Préparation', correction: 'Correction', annulation: 'Suppression', renommage: 'Renommage', inventaire: 'Inventaire' };
+  var MOVEMENT_TYPE_LABELS = { reception: 'Réception', prep: 'Préparation', correction: 'Correction', annulation: 'Suppression', renommage: 'Renommage', inventaire: 'Inventaire', commande: 'Commande (TEST)' };
   function lowStockRefs(){
     return Object.keys(stock)
       .filter(function(r){ return stock[r] <= lowStockThreshold; })
@@ -4259,6 +4479,31 @@
     document.getElementById('historyModal').classList.remove('show');
   });
 
+  /* ================= TEST LOCAL — pont vers le prototype Commandes ================= */
+  // Expose le strict nécessaire pour que le prototype "Commandes" (autre
+  // portée JS, plus bas dans le fichier) puisse déclencher le vrai scanner
+  // caméra et le retour visuel — jamais poussé, prototype uniquement.
+  window.__blStartScan = function(){ scanPurpose = 'commande'; startScan(); };
+  window.__blFlashScan = flashScan;
+  window.__blAskInput = askInput;
+  window.__blAdjustStock = adjustStock;
+  window.__blCatalogRef = function(code){ return catalog[code] || null; };
+  window.__blToast = toast;
+  window.__blCurrentUser = function(){ return currentUser || null; };
+  window.__blUid = uid;
+  // File de BL partagée + verrou anti-double-prise + audit (Supabase) :
+  window.__blSetQueueChangeHandler = function(fn){
+    blQueueChangeCb = fn;
+    if(Object.keys(sharedBLQueue).length) fn();
+  };
+  window.__blQueueRows = function(){ return sharedBLQueue; };
+  window.__blInsert = insertBLRow;
+  window.__blClaim = claimBLRow;
+  window.__blRelease = releaseBLRow;
+  window.__blSaveItems = saveBLItems;
+  window.__blComplete = completeBLRow;
+  window.__blLogEvent = logBLEvent;
+
   /* ================= Init ================= */
   renderPinDots();
   renderSortToggle();
@@ -4267,6 +4512,820 @@
   renderLowStockBadge();
   showLockStep();
   initSharedCatalog();
+})();
+</script>
+
+<!-- ═══════════════════════════════════════════════════
+     TEST LOCAL — Prototype parseur BL Star6000
+     Jamais poussé ni fusionné. Isolé de l'app principale.
+     Client list copiée depuis l'appli "Départs Livraison"
+     (lecture seule, rien n'est écrit dans cette autre appli).
+════════════════════════════════════════════════════ -->
+<script>
+(function(){
+  'use strict';
+
+  var CARRIER_LABELS = {
+    serge: 'Serge', lande: 'Packeto Lande', pb: 'Packeto Pays Basque',
+    bearn: 'Packeto Béarn', hendaye: 'Packeto Hendaye', ace: 'ACE Hendaye'
+  };
+
+  var GARAGES_DATA = [
+    // ── A ──
+    { g: 'ABL Automobile',              carriers: [{id:'hendaye',deps:['09h15','14h15']},{id:'ace',deps:['07h00','11h30']}] },
+    { g: 'Adour Occasion',              carriers: [{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'AG Auto 64',                  carriers: [{id:'serge',deps:['09h30','15h30']},{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'Agri Oto',                    carriers: [{id:'serge',deps:['09h30','15h30']},{id:'pb',deps:['11h15','18h00']}] },
+    { g: 'Aguer',                       carriers: [{id:'bearn',deps:['11h00','15h30']}] },
+    { g: 'Aguerre André (Irissarry)',   carriers: [{id:'pb',deps:['11h15','18h00']}] },
+    { g: 'Ahozteia',                    carriers: [{id:'pb',deps:['11h15','18h00']}] },
+    { g: 'Alain EMP Parachou (Loubet)', carriers: [{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'Alfaro Mattin',               carriers: [{id:'pb',deps:['11h15','18h00']}] },
+    { g: 'Alfaro Sébastien',            carriers: [{id:'serge',deps:['09h30','15h30']},{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'Ambulance Du Labourd',        carriers: [{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'Aquitaine Auto Béarn',        carriers: [{id:'bearn',deps:['11h00','15h30']}] },
+    { g: 'Arosteguy',                   carriers: [{id:'pb',deps:['11h15','18h00']}] },
+    { g: 'Arrayet Garage',              carriers: [{id:'serge',deps:['09h30','15h30']},{id:'pb',deps:['11h15','18h00']}] },
+    { g: 'Arrieta (Station Elan)',      carriers: [{id:'serge',deps:['09h30','15h30']},{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'ASF',                         carriers: [{id:'serge',deps:['09h30','15h30']},{id:'pb',deps:['11h15','18h00']}] },
+    { g: 'Astigarage',                  carriers: [{id:'serge',deps:['09h30','15h30']},{id:'pb',deps:['11h15','18h00']}] },
+    { g: 'At Jardin',                   carriers: [{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'Atelier Du Bourriaou',        carriers: [{id:'bearn',deps:['11h00','15h30']},{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'Atelier Garcia',              carriers: [{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'Atlantic Auto',               carriers: [{id:'lande',deps:['10h45','15h30']}] },
+    { g: 'Augaray (Roady)',             carriers: [{id:'serge',deps:['09h30','15h30']},{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'Autaa Levage (Artix)',        carriers: [{id:'bearn',deps:['11h00','15h30']}] },
+    { g: 'Auto Loisir',                 carriers: [{id:'hendaye',deps:['09h15','14h15']},{id:'ace',deps:['07h00','11h30']}] },
+    { g: 'Auto Casse Du Labourd',       carriers: [{id:'serge',deps:['09h30','15h30']},{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'Auto Libier',                 carriers: [{id:'hendaye',deps:['09h15','14h15']}] },
+    { g: 'Auto Méca Concept',           carriers: [{id:'lande',deps:['06h00','11h00','15h30']},{id:'ace',deps:['07h00','11h30']}] },
+    { g: 'Auto Sport',                  carriers: [] },
+    { g: 'Autolan',                     carriers: [{id:'serge',deps:['09h30','15h30']},{id:'pb',deps:['11h15','18h00']}] },
+    { g: 'Autovision',                  carriers: [{id:'pb',deps:['11h15','16h15']}] },
+    // ── B ──
+    { g: 'Barbe Et Fils',               carriers: [{id:'lande',deps:['06h00','10h45','15h30']}] },
+    { g: 'Barnetche',                   carriers: [{id:'serge',deps:['09h30','15h30']},{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'Bénat Lahirigoyen',           carriers: [{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'Berho',                       carriers: [{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'Berrouet',                    carriers: [{id:'serge',deps:['09h30','15h30']},{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'Bidegaimberry',               carriers: [{id:'pb',deps:['11h15','18h00']}] },
+    { g: 'Bildozeko',                   carriers: [{id:'pb',deps:['11h15','18h00']}] },
+    { g: 'Bittola',                     carriers: [{id:'hendaye',deps:['09h15','14h15']},{id:'ace',deps:['07h00','11h30']}] },
+    { g: 'Bourriaou',                   carriers: [{id:'bearn',deps:['11h00','15h30']}] },
+    { g: 'Bug',                         carriers: [{id:'pb',deps:['11h15','16h15']}] },
+    // ── C ──
+    { g: 'Canton',                      carriers: [{id:'bearn',deps:['11h00','15h30']}] },
+    { g: 'Capbreton Garage Service',    carriers: [{id:'lande',deps:['06h00','10h45','15h30']}] },
+    { g: 'Carriquiry',                  carriers: [{id:'pb',deps:['11h15','18h00']}] },
+    { g: 'Carrosserie Du 64',           carriers: [{id:'bearn',deps:['11h00','15h30']}] },
+    { g: 'Casse Auto Valade (EV)',      carriers: [{id:'lande',deps:['06h00']},{id:'bearn',deps:['11h00','15h30']}] },
+    { g: 'Casse Auto Du Labourd',       carriers: [{id:'serge',deps:['09h30','15h30']},{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'Castera',                     carriers: [{id:'bearn',deps:['11h00','15h30']}] },
+    { g: 'Catelin',                     carriers: [{id:'serge',deps:['09h30','15h30']},{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'Cazauran',                    carriers: [{id:'serge',deps:['09h30','15h30']},{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'Cebre Auto Bidassoa',         carriers: [{id:'hendaye',deps:['09h15','14h15']},{id:'ace',deps:['07h00','11h30']}] },
+    { g: 'Chopin',                      carriers: [{id:'lande',deps:['06h00','10h45']}] },
+    { g: 'Clean And Co',                carriers: [{id:'lande',deps:['06h00','10h45','15h30']}] },
+    { g: 'CN Auto',                     carriers: [{id:'ace',deps:['07h00','11h30']}] },
+    { g: 'Colet',                       carriers: [{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'Commune De Maremne',          carriers: [{id:'lande',deps:['11h00']}] },
+    { g: 'Commune De Salies',           carriers: [{id:'bearn',deps:['11h00','15h30']}] },
+    { g: 'Coreba',                      carriers: [{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'Creacar (Ayherré)',           carriers: [{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'Creacar (Hasparren)',         carriers: [{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'Crosa St Jean De Luz',        carriers: [{id:'ace',deps:['07h00','11h30']}] },
+    { g: 'Cruiser',                     carriers: [{id:'lande',deps:['06h00','10h45','15h30']}] },
+    { g: 'Ctrl Technique Bonloc',       carriers: [{id:'pb',deps:['11h15','16h15']}] },
+    // ── D ──
+    { g: 'Daguerre',                    carriers: [{id:'serge',deps:['09h30','15h30']},{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'Dallard St Jean De Luz',      carriers: [{id:'ace',deps:['07h00','11h30']}] },
+    { g: 'Dallard St Paul Les Dax',     carriers: [{id:'lande',deps:['06h00','11h00']}] },
+    { g: 'Dartiguenave',                carriers: [{id:'bearn',deps:['11h00','15h30']}] },
+    { g: 'DCI Event',                   carriers: [{id:'serge',deps:['09h30','15h30']},{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'Debussy',                     carriers: [{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'Dekra (Itxassou)',            carriers: [{id:'serge',deps:['09h30','15h30']},{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'Detcheverry',                 carriers: [{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'Div Bug',                     carriers: [{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'DNL Auto',                    carriers: [{id:'serge',deps:['09h30','15h30']},{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'Doucet',                      carriers: [{id:'lande',deps:['06h00','10h45']}] },
+    { g: 'Douhry',                      carriers: [{id:'serge',deps:['09h30','15h30']},{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'Drop Loc',                    carriers: [{id:'serge',deps:['09h30','15h30']},{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'DSM Auto',                    carriers: [{id:'serge',deps:['09h30','15h30']},{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'DTH',                         carriers: [{id:'serge',deps:['09h30','15h30']},{id:'pb',deps:['11h15','18h00']}] },
+    { g: 'Duhalde',                     carriers: [{id:'serge',deps:['09h30','15h30']},{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'Duhau (St Palais)',           carriers: [{id:'pb',deps:['11h15','18h00']}] },
+    { g: 'Durruty (GSD)',               carriers: [{id:'serge',deps:['09h30','15h30']},{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'DV Auto',                     carriers: [{id:'pb',deps:['11h15','18h00']}] },
+    { g: 'Dirasse',                    carriers: [{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'Landes Auto Remorques',      carriers: [{id:'lande',deps:['10h45','15h30']}] },
+    // ── E ──
+    { g: 'Eco Pneu',                    carriers: [{id:'lande',deps:['06h00','11h00']}] },
+    { g: 'Egis Exploitation',           carriers: [{id:'lande',deps:['06h00','11h00']}] },
+    { g: 'EMP Lapurdi',                 carriers: [{id:'serge',deps:['09h30','15h30']},{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'Errobi Garage',               carriers: [{id:'serge',deps:['09h30','15h30']},{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'Espace Auto Landais',         carriers: [{id:'lande',deps:['06h00']},{id:'bearn',deps:['11h00','15h30']}] },
+    { g: 'Essenjy',                     carriers: [{id:'lande',deps:['06h00','11h00','15h30']}] },
+    { g: 'Etchegaray (Hasparren)',      carriers: [{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'Etchegaray (Larressore)',     carriers: [{id:'serge',deps:['09h30','15h30']},{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'Etchegaray Guy (Itxassu)',    carriers: [{id:'serge',deps:['09h30','15h30']},{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'Etchegoimberry',              carriers: [{id:'pb',deps:['11h15','18h00']}] },
+    { g: 'Etchegoïn',                   carriers: [{id:'pb',deps:['11h15','18h00']}] },
+    { g: 'Etcheverry Garage',           carriers: [{id:'serge',deps:['09h30','15h30']},{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'ETPM',                        carriers: [{id:'serge',deps:['09h30','15h30']},{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'Euromaster (St Palais)',      carriers: [{id:'pb',deps:['11h15','18h00']}] },
+    { g: 'Europ Autosport',             carriers: [{id:'hendaye',deps:['09h15','14h15']},{id:'ace',deps:['07h00','11h30']}] },
+    { g: 'EV (Casse Auto Valade)',      carriers: [{id:'lande',deps:['06h00']},{id:'bearn',deps:['11h00','15h30']}] },
+    { g: 'Evasion Marine',              carriers: [{id:'lande',deps:['10h45','15h30']}] },
+    { g: 'Eyheramouno',                 carriers: [{id:'pb',deps:['11h15','18h00']}] },
+    { g: 'Ezpela',                      carriers: [{id:'serge',deps:['09h30','15h30']},{id:'pb',deps:['11h15','16h15']}] },
+    // ── F ──
+    { g: 'Feu Vert Bidart',             carriers: [{id:'ace',deps:['07h00','11h30']}] },
+    { g: 'Feu Vert Dax',               carriers: [{id:'lande',deps:['06h00','11h00']}] },
+    { g: 'Feu Vert Hendaye',            carriers: [{id:'hendaye',deps:['09h15','14h15']},{id:'ace',deps:['07h00','11h30']}] },
+    { g: 'Feu Vert St Jean',            carriers: [{id:'ace',deps:['07h00','11h30']}] },
+    { g: 'Fix Auto',                    carriers: [{id:'bearn',deps:['11h00','15h30']}] },
+    { g: 'Frantxoa Maitia',             carriers: [{id:'serge',deps:['09h30','15h30']}] },
+    // ── G ──
+    { g: 'Garage De La Gare',          carriers: [{id:'serge',deps:['09h30','15h30']},{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'Garage De La Zone',          carriers: [{id:'lande',deps:['06h00','10h45']}] },
+    { g: "Garage De L'Avenue Hossegor",carriers: [{id:'lande',deps:['06h00','10h45','15h30']}] },
+    { g: 'Garage De Maremne',          carriers: [{id:'lande',deps:['06h00','11h00']}] },
+    { g: 'Garage Des Lacs',            carriers: [{id:'lande',deps:['06h00','11h00']}] },
+    { g: 'Garage Du Canton',           carriers: [{id:'bearn',deps:['11h00','15h30']}] },
+    { g: 'Garage Du Rond Point',       carriers: [{id:'pb',deps:['11h15','18h00']}] },
+    { g: 'Garage Du Seignanx',         carriers: [{id:'lande',deps:['06h00']},{id:'bearn',deps:['11h00','15h30']}] },
+    { g: 'Garage Errobi',              carriers: [{id:'serge',deps:['09h30','15h30']},{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'Garauto',                    carriers: [{id:'lande',deps:['06h00','10h45','15h30']}] },
+    { g: 'Garazi DTH',                 carriers: [{id:'serge',deps:['09h30','15h30']},{id:'pb',deps:['11h15','18h00']}] },
+    { g: 'Gardères',                   carriers: [{id:'pb',deps:['11h15','18h00']}] },
+    { g: 'Gariador',                   carriers: [{id:'pb',deps:['11h15','18h00']}] },
+    { g: 'Gauyat',                     carriers: [{id:'lande',deps:['06h00','11h00','15h30']}] },
+    { g: 'GD Pneu',                    carriers: [{id:'bearn',deps:['11h00','15h30']}] },
+    { g: 'GDM',                        carriers: [{id:'serge',deps:['09h30','15h30']},{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'Gentil Service',             carriers: [{id:'lande',deps:['06h00','10h45']}] },
+    { g: 'Global Car',                 carriers: [{id:'bearn',deps:['11h00','15h30']}] },
+    { g: 'GSD Gestion Sces Location',  carriers: [{id:'serge',deps:['09h30','15h30']},{id:'pb',deps:['11h15','16h15']}] },
+    // ── H ──
+    { g: 'Happy Car',                  carriers: [{id:'pb',deps:['11h15','18h00']}] },
+    { g: 'Harispe',                    carriers: [{id:'pb',deps:['11h15','18h00']}] },
+    { g: 'Haristoy',                   carriers: [{id:'pb',deps:['11h15','18h00']}] },
+    { g: 'Herrikoa',                   carriers: [{id:'hendaye',deps:['09h15','14h15']}] },
+    { g: 'Hirigoyen Louhossoa',        carriers: [{id:'serge',deps:['09h30','15h30']},{id:'pb',deps:['11h15','18h00']}] },
+    { g: 'Hirigoyen Macaye',           carriers: [{id:'serge',deps:['09h30','15h30']},{id:'pb',deps:['11h15','18h00']}] },
+    { g: 'Hiruak Bat',                 carriers: [{id:'pb',deps:['11h15','18h00']}] },
+    { g: 'Hourdebaigt',                carriers: [{id:'bearn',deps:['11h00','15h30']}] },
+    // ── I ──
+    { g: 'Illumbe',                    carriers: [{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'Intxaurmendi',               carriers: [{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'Irachabal',                  carriers: [{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'Irey',                       carriers: [{id:'serge',deps:['09h30','15h30']},{id:'pb',deps:['11h15','18h00']}] },
+    { g: 'Iribarren Patrick',          carriers: [{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'Ispeguy (Mocho)',            carriers: [{id:'pb',deps:['11h15','18h00']}] },
+    // ── J ──
+    { g: 'Jaury',                      carriers: [{id:'pb',deps:['11h15','18h00']}] },
+    { g: 'JM Auto',                    carriers: [{id:'lande',deps:['06h00']},{id:'bearn',deps:['11h00','15h30']}] },
+    { g: 'John Deere',                 carriers: [{id:'pb',deps:['11h15','18h00']}] },
+    { g: 'JS Auto',                    carriers: [{id:'ace',deps:['07h00','11h30']}] },
+    { g: 'Julien Muguida',             carriers: [{id:'serge',deps:['09h30','15h30']},{id:'pb',deps:['11h15','16h15']}] },
+    // ── K ──
+    { g: 'Kenzo',                      carriers: [{id:'hendaye',deps:['09h15','14h15']},{id:'ace',deps:['07h00','11h30']}] },
+    { g: 'Koro',                       carriers: [{id:'lande',deps:['10h45','15h30']}] },
+    // ── L ──
+    { g: "L'Avenue Hossegor",          carriers: [{id:'lande',deps:['06h00','10h45','15h30']}] },
+    { g: 'La Gare (Combo)',            carriers: [{id:'serge',deps:['09h30','15h30']},{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'Labaçhot (Escos)',           carriers: [{id:'pb',deps:['15h15','18h00']}] },
+    { g: 'Laminak Bus',                carriers: [{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'Lana',                       carriers: [{id:'lande',deps:['06h00','10h45','15h30']},{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'Landoto',                    carriers: [{id:'lande',deps:['06h00','10h45','15h30']}] },
+    { g: 'Lapurdi Garage',             carriers: [{id:'serge',deps:['09h30','15h30']},{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'Lascano',                    carriers: [{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'Lau Auto',                   carriers: [{id:'hendaye',deps:['09h15','14h15']},{id:'ace',deps:['07h00','11h30']}] },
+    { g: 'Lavignasse',                 carriers: [{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'LB Service 40',             carriers: [{id:'bearn',deps:['11h00','15h30']}] },
+    { g: 'Le Petit Garage',            carriers: [{id:'serge',deps:['09h30','15h30']},{id:'pb',deps:['11h15','18h00']}] },
+    { g: 'Le Vieux Port (Chez Chopin)',carriers: [{id:'lande',deps:['06h00','10h45']}] },
+    { g: 'Leclerc Capbreton (Socadi)', carriers: [{id:'lande',deps:['06h00','10h45','15h30']}] },
+    { g: 'Leclerc Hendaye',            carriers: [{id:'hendaye',deps:['09h15','14h15']},{id:'ace',deps:['07h00','11h30']}] },
+    { g: 'Leclerc Soutons',            carriers: [{id:'lande',deps:['06h00','10h45']}] },
+    { g: 'Leclerc St Jean De Luz',     carriers: [{id:'ace',deps:['07h00','11h30']}] },
+    { g: 'Leclerc Tyrosse',            carriers: [{id:'lande',deps:['06h00','11h00','15h30']}] },
+    { g: 'Lerzy',                      carriers: [{id:'serge',deps:['09h30','15h30']},{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'Lissart Didier',             carriers: [{id:'bearn',deps:['11h00','15h30']}] },
+    { g: 'Lokaz Auto',                 carriers: [{id:'hendaye',deps:['09h15','14h15']},{id:'ace',deps:['07h00','11h30']}] },
+    { g: 'Loubet',                     carriers: [{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'Lousteau',                   carriers: [{id:'pb',deps:['11h15','18h00']}] },
+    { g: 'Lucu',                       carriers: [{id:'pb',deps:['11h15','18h00']}] },
+    { g: 'Lycée Pro JP Champo',        carriers: [{id:'pb',deps:['11h15']}] },
+    // ── M ──
+    { g: 'Madalia Ocafrain',           carriers: [{id:'serge',deps:['09h30','15h30']},{id:'pb',deps:['11h15','18h00']}] },
+    { g: 'Mainhaguiet',                carriers: [{id:'pb',deps:['11h15','18h00']}] },
+    { g: 'Maitia Frantxoa',            carriers: [{id:'serge',deps:['09h30','15h30']}] },
+    { g: 'Many Loisir',                carriers: [{id:'pb',deps:['11h15','18h00']}] },
+    { g: 'Marensin Chopin',            carriers: [{id:'lande',deps:['06h00','10h45']}] },
+    { g: 'Marinela',                   carriers: [{id:'ace',deps:['07h00','11h30']}] },
+    { g: 'Martinon',                   carriers: [{id:'pb',deps:['11h15','18h00']}] },
+    { g: 'Mathieu EMP Lapurdi',        carriers: [{id:'serge',deps:['09h30','15h30']},{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'Maya Sport',                 carriers: [{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'Mecagri',                    carriers: [{id:'serge',deps:['09h30','15h30']},{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'Mendiburu Frere-Horticulteur',carriers:[{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'Mendikoharis (URT Auto)',    carriers: [{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'MHSB',                       carriers: [{id:'serge',deps:['09h30','15h30']},{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'Miramon',                    carriers: [{id:'pb',deps:['11h15','18h00']}] },
+    { g: 'MJ Auto',                    carriers: [{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'ML',                         carriers: [{id:'bearn',deps:['11h00','15h30']}] },
+    { g: 'Mocho (Ispeguy)',            carriers: [{id:'pb',deps:['11h15','18h00']}] },
+    { g: 'Montolieu',                  carriers: [{id:'pb',deps:['11h15','18h00']}] },
+    { g: 'Motoculture Du Bas Adour',   carriers: [{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'Muguida',                    carriers: [{id:'serge',deps:['09h30','15h30']},{id:'pb',deps:['11h15','16h15']}] },
+    // ── N ──
+    { g: 'Nafarroa',                   carriers: [{id:'serge',deps:['09h30','15h30']},{id:'pb',deps:['11h15','18h00']}] },
+    { g: 'Naza',                       carriers: [{id:'lande',deps:['10h45','15h30']}] },
+    { g: 'NCS',                        carriers: [{id:'pb',deps:['11h15','18h00']}] },
+    { g: 'Negobus',                    carriers: [{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'Néo Réseaux',                carriers: [{id:'pb',deps:['11h15','18h00']}] },
+    { g: 'Neoglass',                   carriers: [{id:'pb',deps:['11h15','18h00']}] },
+    { g: 'Noël Auto',                  carriers: [{id:'hendaye',deps:['09h15','14h15']},{id:'ace',deps:['07h00','11h30']}] },
+    { g: 'NR Motorsport',              carriers: [{id:'bearn',deps:['11h00']}] },
+    // ── O ──
+    { g: 'Ocafrain Madalia',           carriers: [{id:'serge',deps:['09h30','15h30']},{id:'pb',deps:['11h15','18h00']}] },
+    { g: 'Olaizola',                   carriers: [{id:'pb',deps:['15h15','16h15']}] },
+    { g: 'Orthez Auto',                carriers: [{id:'bearn',deps:['11h00','15h30']}] },
+    { g: 'Oyhamburu',                  carriers: [{id:'pb',deps:['11h15','18h00']}] },
+    // ── P ──
+    { g: 'Pat Auto',                   carriers: [{id:'serge',deps:['15h30']},{id:'pb',deps:['11h15']}] },
+    { g: 'Pedare (Ustaritz)',          carriers: [{id:'serge',deps:['09h30','15h30']},{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'Petit Garage',               carriers: [{id:'serge',deps:['09h30','15h30']},{id:'pb',deps:['11h15','18h00']}] },
+    { g: 'Peyre Pare-Brise',           carriers: [{id:'bearn',deps:['11h00','15h30']}] },
+    { g: 'Pirone',                     carriers: [{id:'lande',deps:['06h00','10h45','15h30']}] },
+    { g: 'Planuya',                    carriers: [{id:'serge',deps:['09h30','15h30']},{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'Pochulu',                    carriers: [{id:'pb',deps:['11h15','18h00']}] },
+    { g: 'Poulou Pascal',              carriers: [{id:'hendaye',deps:['09h15','14h15']},{id:'ace',deps:['07h00','11h30']}] },
+    { g: 'Puissance D Garage',         carriers: [{id:'lande',deps:['06h00','11h00']}] },
+    { g: 'Pyrénées Auto',              carriers: [{id:'bearn',deps:['11h00','15h30']}] },
+    // ── R ──
+    { g: 'Raymond',                    carriers: [{id:'bearn',deps:['11h00','15h30']}] },
+    { g: 'Reflex Auto',                carriers: [{id:'lande',deps:['06h00','10h45','15h30']}] },
+    { g: 'Relais Des Gaves',           carriers: [{id:'lande',deps:['06h00']},{id:'pb',deps:['11h00','15h30']},{id:'bearn',deps:['11h00','15h30']}] },
+    { g: 'Roady (Augaray)',            carriers: [{id:'serge',deps:['09h30','15h30']},{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'Rond Point',                 carriers: [{id:'pb',deps:['11h15','18h00']}] },
+    { g: 'RV Garage',                  carriers: [{id:'pb',deps:['11h15','16h15']}] },
+    // ── S ──
+    { g: 'Sabarots',                   carriers: [{id:'serge',deps:['09h30','15h30']},{id:'pb',deps:['11h15','18h00']}] },
+    { g: 'Saffores',                   carriers: [] },
+    { g: 'Sakanette',                  carriers: [{id:'serge',deps:['09h30','15h30']},{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'Salles Et Dutrey',           carriers: [{id:'lande',deps:['06h00','10h45','15h30']}] },
+    { g: 'Scavelli',                   carriers: [{id:'bearn',deps:['11h00','15h30']}] },
+    { g: 'Semerena',                   carriers: [{id:'serge',deps:['09h30','15h30']},{id:'pb',deps:['11h15','18h00']}] },
+    { g: 'SGM Auto',                   carriers: [{id:'lande',deps:['06h00','11h00']}] },
+    { g: 'Sobamat',                    carriers: [{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'Socadi (Leclerc Capbreton)', carriers: [{id:'lande',deps:['06h00','10h45','15h30']}] },
+    { g: 'Sopite',                     carriers: [{id:'hendaye',deps:['09h15','14h15']},{id:'ace',deps:['07h00','11h30']}] },
+    { g: 'Spvi Dax',                   carriers: [{id:'lande',deps:['06h00','11h00']}] },
+    { g: 'St Etienne Garage',          carriers: [{id:'bearn',deps:['11h00','15h30']}] },
+    { g: 'Station Elan Arrieta',       carriers: [{id:'serge',deps:['09h30','15h30']},{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'Station Service Du Port',    carriers: [{id:'lande',deps:['06h00','10h45','15h30']}] },
+    { g: 'STPI',                       carriers: [{id:'hendaye',deps:['09h15','14h15']}] },
+    // ── T ──
+    { g: 'Thambo J-Pierre',            carriers: [{id:'pb',deps:['11h15','18h00']}] },
+    { g: 'Tilt Auto',                  carriers: [{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'TMS',                        carriers: [{id:'serge',deps:['09h30','15h30']},{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'Toffolo',                    carriers: [{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'Triumphe (Vintage Vadrouille)',carriers:[{id:'hendaye',deps:['09h15','14h15']}] },
+    { g: 'TS Auto',                    carriers: [{id:'pb',deps:['11h15','16h15']}] },
+    // ── U ──
+    { g: 'Urtxintxa',                  carriers: [{id:'pb',deps:['11h15','16h15']}] },
+    { g: 'URT Auto (Mendikoharis)',    carriers: [{id:'pb',deps:['11h15','16h15']}] },
+    // ── V ──
+    { g: 'Vallade (EV)',               carriers: [{id:'lande',deps:['06h00']},{id:'bearn',deps:['11h00','15h30']}] },
+    { g: 'Ville De Cambo',             carriers: [{id:'serge',deps:['09h30','15h30']},{id:'pb',deps:['11h15']}] },
+    { g: 'Ville Hendaye',              carriers: [{id:'hendaye',deps:['09h15','14h15']},{id:'ace',deps:['07h00','11h30']}] },
+    { g: 'Ville Hossegor',             carriers: [{id:'lande',deps:['06h00','10h45']}] },
+    { g: 'Vintage Car Club',           carriers: [{id:'lande',deps:['06h00','10h45','15h30']}] },
+    { g: 'Vintage Vadrouille (Triumphe)',carriers:[{id:'hendaye',deps:['09h15','14h15']}] },
+    // ── W ──
+    { g: 'World Of Part',              carriers: [{id:'bearn',deps:['11h00','15h30']}] },
+    // ── X ──
+    { g: 'Xabi Girard',                carriers: [{id:'serge',deps:['09h30','15h30']},{id:'pb',deps:['11h15','15h30']}] },
+    { g: 'Xabi Meca',                  carriers: [{id:'bearn',deps:['11h00','15h30']}] },
+    // ── Z ──
+    { g: 'Zelaia',                     carriers: [{id:'pb',deps:['11h15','18h00']}] }
+  ];
+
+  function blEscapeHtml(s){
+    return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function labelValue(lines, label){
+    var re = new RegExp('^\\s*' + label + '\\s*:?\\s*(.+)$', 'i');
+    for (var i = 0; i < lines.length; i++) {
+      var m = re.exec(lines[i]);
+      if (m) return m[1].trim();
+    }
+    return null;
+  }
+
+  // Prototype base sur la structure vue dans la photo du BL — a recalibrer
+  // dès qu'on a un vrai texte extrait d'un PDF Star6000.
+  function parseBLText(text){
+    var lines = text.split(/\r?\n/).map(function(l){ return l.trim(); }).filter(Boolean);
+    var docNumberMatch = /BON DE LIVRAISON\s+(\d+)/i.exec(text);
+    var docType = labelValue(lines, 'Document');
+    var docNumber = docNumberMatch ? docNumberMatch[1] : labelValue(lines, 'Num[ée]ro document');
+    var docDateRaw = labelValue(lines, 'Date Document');
+    var docDate = docDateRaw ? (docDateRaw.split('*')[0] || '').trim() : null;
+    var refCommande = labelValue(lines, 'Ref Commande');
+    var magasin = labelValue(lines, 'Etabli par');
+
+    var lineRe = /^([A-Z0-9]{2,6})\s+([A-Z0-9#.\-]{3,15})\s+(.+?)\s+(\d+)\s*Unite\s*([\d,]+)?/i;
+    var items = [];
+    lines.forEach(function(l){
+      var m = lineRe.exec(l);
+      if (m) {
+        items.push({
+          frs: m[1].toUpperCase(),
+          refFournisseur: m[2].toUpperCase(),
+          designation: m[3].trim(),
+          qty: parseInt(m[4], 10),
+          prixUnitaire: m[5] ? parseFloat(m[5].replace(',', '.')) : null
+        });
+      }
+    });
+
+    return { docType: docType, docNumber: docNumber, docDate: docDate, refCommande: refCommande, magasin: magasin, items: items };
+  }
+
+  function normalizeForMatch(s){
+    return String(s || '').toLowerCase()
+      .normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/[^a-z0-9]+/g, ' ').trim();
+  }
+
+  // Recouvrement de mots — score 0..1. En dessous d'un seuil de confiance,
+  // le tri manuel prend le relai plutôt que d'assigner au hasard.
+  function matchGarage(clientName, garages){
+    var target = normalizeForMatch(clientName);
+    if (!target) return null;
+    var targetWords = target.split(' ').filter(Boolean);
+    var best = null, bestScore = 0;
+    garages.forEach(function(g){
+      var gname = normalizeForMatch(g.g);
+      if (gname === target) { best = g; bestScore = 1; return; }
+      var gwords = gname.split(' ').filter(Boolean);
+      var common = targetWords.filter(function(w){ return gwords.indexOf(w) !== -1; }).length;
+      var score = common / Math.max(targetWords.length, gwords.length);
+      if (score > bestScore) { bestScore = score; best = g; }
+    });
+    return best ? { garage: best, score: bestScore } : null;
+  }
+
+  var MATCH_CONFIDENCE_THRESHOLD = 0.8;
+
+  function renderBLParserResult(text, clientName){
+    var parsed = parseBLText(text);
+    var match = clientName ? matchGarage(clientName, GARAGES_DATA) : null;
+    var confident = match && match.score >= MATCH_CONFIDENCE_THRESHOLD;
+
+    var html = '<div class="panel">';
+    html += '<b style="font-size:13px;">En-tête</b>';
+    html += '<div style="font-family:var(--font-mono); font-size:12px; margin-top:8px; line-height:1.8;">';
+    html += 'Type de document : <b>' + blEscapeHtml(parsed.docType || '—') + '</b><br>';
+    html += 'Numéro : <b>' + blEscapeHtml(parsed.docNumber || '—') + '</b><br>';
+    html += 'Date : <b>' + blEscapeHtml(parsed.docDate || '—') + '</b><br>';
+    html += 'Ref commande : <b>' + blEscapeHtml(parsed.refCommande || '—') + '</b><br>';
+    html += 'Magasin : <b>' + blEscapeHtml(parsed.magasin || '—') + '</b>';
+    html += '</div></div>';
+
+    html += '<div class="panel">';
+    html += '<b style="font-size:13px;">Client</b><br>';
+    if (!clientName) {
+      html += '<span class="sub">Aucun nom de client saisi.</span>';
+    } else if (confident) {
+      html += '<span style="color:var(--success); font-weight:700;">✓ Match confiant (' + Math.round(match.score * 100) + '%)</span> — <b>' + blEscapeHtml(match.garage.g) + '</b>';
+      html += '<div style="font-family:var(--font-mono); font-size:12px; margin-top:6px;">';
+      match.garage.carriers.forEach(function(c){
+        html += (CARRIER_LABELS[c.id] || c.id) + ' → ' + c.deps.join(', ') + '<br>';
+      });
+      html += '</div>';
+    } else if (match && match.score > 0) {
+      html += '<span style="color:var(--danger); font-weight:700;">⚠ Pas de match fiable</span> (meilleure piste : "' + blEscapeHtml(match.garage.g) + '", ' + Math.round(match.score * 100) + '% — trop faible) → <b>à trier à la main</b>';
+    } else {
+      html += '<span style="color:var(--danger); font-weight:700;">⚠ Aucun garage correspondant trouvé</span> pour "' + blEscapeHtml(clientName) + '" → <b>à trier à la main</b>';
+    }
+    html += '</div>';
+
+    html += '<div class="panel">';
+    html += '<b style="font-size:13px;">Pièces (' + parsed.items.length + ')</b>';
+    if (parsed.items.length === 0) {
+      html += '<div class="sub" style="margin-top:6px;">Aucune ligne reconnue.</div>';
+    } else {
+      html += '<div style="margin-top:8px;">';
+      parsed.items.forEach(function(it){
+        html += '<div class="prep-session-row"><span class="ref">' + blEscapeHtml(it.frs) + ' ' + blEscapeHtml(it.refFournisseur) + ' — ' + blEscapeHtml(it.designation) + '</span><span style="font-family:var(--font-mono); font-weight:800; color:var(--text-dim);">×' + it.qty + (it.prixUnitaire != null ? '  ' + it.prixUnitaire.toFixed(2) + '€' : '') + '</span></div>';
+      });
+      html += '</div>';
+    }
+    html += '</div>';
+
+    return html;
+  }
+
+  /* ── Commandes : file d'attente + préparation validée par scan ──
+     Prototype : la file est alimentée à la main ("Ajouter un BL") en
+     attendant la capture automatique depuis le Star6000. Les BL de
+     démonstration (isDemo) ne touchent jamais au stock réel ; ceux que tu
+     ajoutes toi-même depuis un vrai document décrémentent pour de vrai. */
+  var blQueueTicker = null;
+  var activeBL = null;
+  var demoQueue = null; // BL de démo, jamais synchronisés (voir buildDemoQueue)
+  var localUnsyncedBLs = []; // secours si le pont Supabase n'est pas dispo
+
+  // Prochain départ réel d'un garage, d'après les tournées de l'appli
+  // "Départs Livraison" (transporteur + horaires). Retourne null si le
+  // garage n'est pas identifié ou n'a aucune tournée.
+  function nextDepartureFor(garage){
+    if (!garage || !garage.carriers || !garage.carriers.length) return null;
+    var now = new Date();
+    var best = null;
+    garage.carriers.forEach(function(c){
+      (c.deps || []).forEach(function(dep){
+        var m = /^(\d{1,2})h(\d{2})$/.exec(dep);
+        if (!m) return;
+        var d = new Date(now);
+        d.setHours(parseInt(m[1], 10), parseInt(m[2], 10), 0, 0);
+        if (d.getTime() <= now.getTime()) return; // déjà passé aujourd'hui
+        if (!best || d.getTime() < best.at) best = { at: d.getTime(), carrier: c.id, label: dep };
+      });
+    });
+    return best;
+  }
+
+  function currentUserName(){
+    return (window.__blCurrentUser ? window.__blCurrentUser() : null) || 'Collègue';
+  }
+  function blUid(){
+    return window.__blUid ? window.__blUid() : (Date.now().toString(36) + Math.random().toString(36).slice(2, 7));
+  }
+  // Ligne Supabase (bl_queue) -> forme utilisée par l'écran (mêmes clés que
+  // les BL de démo, pour que le reste du code ne distingue pas les deux).
+  function rowToLocalBL(row){
+    return {
+      id: row.id,
+      docNumber: row.doc_number,
+      docDate: row.doc_date,
+      client: row.client,
+      refCommande: row.ref_commande,
+      garageName: row.garage_name,
+      carrierLabel: row.carrier_label,
+      departureAt: row.departure_at ? new Date(row.departure_at).getTime() : null,
+      status: row.status,
+      claimedBy: row.claimed_by,
+      claimedAt: row.claimed_at,
+      items: row.items || [],
+      isDemo: false
+    };
+  }
+  function getBLList(){
+    if (!demoQueue) demoQueue = buildDemoQueue();
+    var rows = window.__blQueueRows ? window.__blQueueRows() : {};
+    var synced = Object.keys(rows).map(function(id){ return rowToLocalBL(rows[id]); });
+    return demoQueue.concat(synced, localUnsyncedBLs);
+  }
+  function findBLById(id){
+    return getBLList().find(function(b){ return b.id === id; }) || null;
+  }
+
+  function buildDemoQueue(){
+    var now = Date.now();
+    function inMin(m){ return now + m * 60000; }
+    // Références et codes-barres RÉELS du catalogue Scanette, pour pouvoir
+    // tester avec de vraies pièces en main — mais marqués isDemo, donc
+    // aucun impact sur le stock à la validation.
+    return [
+      {
+        id: 'demo1', docNumber: '2298410', client: 'MECA MAWI', refCommande: 'TWINGO EG658GT',
+        departureAt: inMin(8), status: 'pending', isDemo: true,
+        items: [
+          { ref: 'TC1352', barcode: '5012759350348', designation: 'BIELLETTE DE BARRE STABILISATRICE', qtyRequired: 1, qtyDone: 0 },
+          { ref: 'TC1353', barcode: '5012759350355', designation: 'BIELLETTE DE BARRE STABILISATRICE', qtyRequired: 1, qtyDone: 0 },
+          { ref: 'NST6116', barcode: '5056197291306', designation: 'ROTULE DE DIRECTION', qtyRequired: 1, qtyDone: 0 },
+          { ref: 'SM1504', barcode: '4909500378045', designation: 'RENAULT CLIO I. TWINGO AV', qtyRequired: 2, qtyDone: 0 },
+          { ref: '913237', barcode: '4909500629260', designation: 'RENAULT KANGOO AV', qtyRequired: 1, qtyDone: 0 }
+        ]
+      },
+      {
+        id: 'demo2', docNumber: '2298415', client: 'Xabi Meca', refCommande: 'CLIO III BF204XY',
+        departureAt: inMin(25), status: 'pending', isDemo: true,
+        items: [
+          { ref: '333724', barcode: '4909500541548', designation: 'RENAULT TWINGO AVG', qtyRequired: 2, qtyDone: 0 },
+          { ref: '333723', barcode: '4909500541524', designation: 'RENAULT TWINGO AVD', qtyRequired: 1, qtyDone: 0 },
+          { ref: 'K2608', barcode: '3599771885598', designation: 'KIT/ETANCHEITE CB RENAULT', qtyRequired: 1, qtyDone: 0 }
+        ]
+      },
+      {
+        id: 'demo3', docNumber: '2298421', client: 'AG Auto 64', refCommande: 'KANGOO DR847ZT',
+        departureAt: inMin(110), status: 'pending', isDemo: true,
+        items: [
+          { ref: '1090', barcode: '3521750010905', designation: 'KIT S. R9-R11-R19-R21-CLIO', qtyRequired: 1, qtyDone: 0 },
+          { ref: '026213P', barcode: '3358960262134', designation: 'JCCULA RNLT CLIO 1 D7F', qtyRequired: 1, qtyDone: 0 },
+          { ref: 'NSU3000', barcode: '5056599452725', designation: 'SOUFFLET UNIVERSEL DE TRANSMISSION', qtyRequired: 2, qtyDone: 0 }
+        ]
+      },
+      {
+        id: 'demo4', docNumber: '2298398', client: 'Barnetche', refCommande: 'MEGANE CS221AA',
+        departureAt: inMin(180), status: 'ready', isDemo: true,
+        items: [
+          { ref: '910068', barcode: '4909500833728', designation: 'RENAULT CLIO II AR', qtyRequired: 1, qtyDone: 1 }
+        ]
+      }
+    ];
+  }
+
+  function blFormatCountdown(departureAt){
+    if (!departureAt) return { label: '—', cls: 'calm' };
+    var mins = Math.round((departureAt - Date.now()) / 60000);
+    if (mins <= 0) return { label: 'parti', cls: 'done' };
+    var h = Math.floor(mins / 60), m = mins % 60;
+    return {
+      label: h > 0 ? (h + 'h' + (m < 10 ? '0' : '') + m) : (m + ' min'),
+      cls: mins <= 10 ? 'urgent' : (mins <= 30 ? 'soon' : 'calm')
+    };
+  }
+
+  function renderBLQueue(){
+    var wrap = document.getElementById('blqList');
+    if (!wrap) return;
+    // Le compte à rebours ne tourne que quand l'écran est réellement visible.
+    if (document.getElementById('prepMainView').style.display === 'none') {
+      clearInterval(blQueueTicker);
+      return;
+    }
+    var me = currentUserName();
+    var list = getBLList();
+    var sorted = list.slice().sort(function(a, b){ return (a.departureAt || Infinity) - (b.departureAt || Infinity); });
+    var readyCount = list.filter(function(b){ return b.status === 'ready'; }).length;
+    document.getElementById('blqSub').textContent = (list.length - readyCount) + ' à préparer · ' + readyCount + ' prêt(e)s';
+    if (sorted.length === 0) {
+      wrap.innerHTML = '<div class="panel empty-state"><p>Aucune commande en attente — "Ajouter un BL" pour en créer une.</p></div>';
+      return;
+    }
+    var html = '';
+    sorted.forEach(function(bl){
+      var cd = blFormatCountdown(bl.departureAt);
+      var isReady = bl.status === 'ready';
+      var isClaimedByOther = !isReady && !bl.isDemo && bl.claimedBy && bl.claimedBy !== me;
+      var match = matchGarage(bl.client, GARAGES_DATA);
+      var confident = match && match.score >= MATCH_CONFIDENCE_THRESHOLD;
+      var doneLines = bl.items.filter(function(it){ return it.qtyDone === it.qtyRequired; }).length;
+      html += '<div class="blq-card ' + (isReady ? 'ready' : (isClaimedByOther ? 'claimed' : cd.cls)) + '" data-id="' + bl.id + '">';
+      html += '<div class="blq-main"><div class="blq-client">' + blEscapeHtml(bl.client) + (confident ? '' : '<span class="blq-badge-unmatched">⚠ non identifié</span>') + (bl.isDemo ? '<span class="blq-badge-unmatched" style="background:rgba(214,138,63,0.15); color:var(--accent); border-color:var(--accent);">démo</span>' : '') + (isClaimedByOther ? '<span class="blq-badge-claimed">' + blEscapeHtml(bl.claimedBy) + ' prépare</span>' : '') + '</div>';
+      html += '<div class="blq-meta">' + blEscapeHtml(bl.docNumber) + ' · ' + blEscapeHtml(bl.refCommande || '') + ' · ' + doneLines + '/' + bl.items.length + ' ligne(s)' + (bl.carrierLabel ? ' · ' + blEscapeHtml(bl.carrierLabel) : '') + '</div></div>';
+      html += '<div class="blq-count"><div class="blq-countdown ' + (isReady ? 'done' : cd.cls) + '">' + (isReady ? '✓ prêt' : cd.label) + '</div>';
+      if (!isReady) html += '<div class="blq-dep-label">départ</div>';
+      html += '</div></div>';
+    });
+    wrap.innerHTML = html;
+  }
+  window.__blRenderQueue = renderBLQueue;
+  window.__blStartQueueTicker = function(on){
+    clearInterval(blQueueTicker);
+    if (on) blQueueTicker = setInterval(renderBLQueue, 1000);
+  };
+  // Rejoué à chaque changement de la file partagée (chargement initial +
+  // temps réel), en plus du tick de compte à rebours.
+  if (window.__blSetQueueChangeHandler) window.__blSetQueueChangeHandler(renderBLQueue);
+
+  document.getElementById('blqList').addEventListener('click', function(e){
+    var card = e.target.closest('.blq-card'); if (!card) return;
+    var bl = findBLById(card.getAttribute('data-id'));
+    if (!bl) return;
+    if (bl.status === 'ready' || bl.isDemo) { openBLPicking(bl); return; }
+    var me = currentUserName();
+    if (bl.claimedBy && bl.claimedBy !== me) {
+      if (window.__blToast) window.__blToast(bl.claimedBy + ' est en train de le préparer');
+      return;
+    }
+    if (!window.__blClaim) { openBLPicking(bl); return; }
+    window.__blClaim(bl.id).then(function(res){
+      if (!res.ok) {
+        renderBLQueue();
+        if (window.__blToast) window.__blToast(res.by ? (res.by + ' vient de le prendre') : 'Impossible de prendre ce BL pour le moment');
+        return;
+      }
+      openBLPicking(rowToLocalBL(res.row));
+    });
+  });
+
+  function openBLPicking(bl){
+    activeBL = bl;
+    renderBLPicking();
+    clearInterval(blQueueTicker);
+    document.getElementById('blPickingOverlay').classList.add('show');
+  }
+  function closeBLPicking(){
+    document.getElementById('blPickingOverlay').classList.remove('show');
+    // On quitte sans avoir validé : on relâche le verrou pour que quelqu'un
+    // d'autre puisse reprendre ce BL.
+    if (activeBL && !activeBL.isDemo && activeBL.status !== 'ready' && window.__blRelease) {
+      window.__blRelease(activeBL.id);
+    }
+    activeBL = null;
+    renderBLQueue();
+    blQueueTicker = setInterval(renderBLQueue, 1000);
+  }
+  function persistActiveBLItems(){
+    if (activeBL && !activeBL.isDemo && window.__blSaveItems) window.__blSaveItems(activeBL.id, activeBL.items);
+  }
+  function renderBLPicking(){
+    var bl = activeBL;
+    var match = matchGarage(bl.client, GARAGES_DATA);
+    var confident = match && match.score >= MATCH_CONFIDENCE_THRESHOLD;
+    var readOnly = bl.status === 'ready';
+    document.getElementById('blpClient').textContent = bl.client;
+    var cd = blFormatCountdown(bl.departureAt);
+    document.getElementById('blpMeta').textContent = bl.docNumber + ' · ' + (bl.refCommande || '') + ' · ' +
+      (confident ? match.garage.g : '⚠ client non identifié') +
+      (bl.departureAt && !readOnly ? ' · départ dans ' + cd.label : '') +
+      (bl.isDemo ? ' · DÉMO (aucun impact stock)' : (readOnly ? ' · déjà validé (' + (bl.completedBy || bl.claimedBy || '') + ')' : ''));
+    var doneLines = bl.items.filter(function(it){ return it.qtyDone === it.qtyRequired; }).length;
+    document.getElementById('blpProgress').textContent = doneLines + ' / ' + bl.items.length + ' ligne(s) validée(s)';
+    var html = '';
+    bl.items.forEach(function(it, idx){
+      var ok = it.qtyDone === it.qtyRequired;
+      var over = it.qtyDone > it.qtyRequired;
+      html += '<div class="blp-row ' + (ok ? 'ok' : (over ? 'over' : '')) + '">';
+      html += '<div class="blp-row-top">';
+      html += '<div><div class="blp-ref">' + blEscapeHtml(it.ref) + '</div><div class="blp-desig">' + blEscapeHtml(it.designation) + '</div></div>';
+      html += '<div class="blp-qty">' + it.qtyDone + ' <span class="req">/ ' + it.qtyRequired + '</span></div>';
+      html += '</div>';
+      if (!readOnly) {
+        html += '<div class="blp-row-actions">';
+        html += '<button class="btn-secondary" data-role="blpMinus" data-idx="' + idx + '">−1</button>';
+        html += '<button class="btn-secondary" data-role="blpEdit" data-idx="' + idx + '">✎ Saisir</button>';
+        html += '<button class="btn-secondary" data-role="blpReset" data-idx="' + idx + '">↺ 0</button>';
+        html += '</div>';
+      }
+      html += '</div>';
+    });
+    document.getElementById('blpList').innerHTML = html;
+    var allOk = bl.items.every(function(it){ return it.qtyDone === it.qtyRequired; });
+    var btn = document.getElementById('btnValidateBL');
+    var scanBtn = document.getElementById('btnCommandeScan');
+    if (readOnly) {
+      btn.style.display = 'none';
+      if (scanBtn) scanBtn.style.display = 'none';
+    } else {
+      btn.style.display = '';
+      if (scanBtn) scanBtn.style.display = '';
+      btn.disabled = !allOk;
+      btn.textContent = allOk ? 'Valider le BL' : 'Valider le BL (' + doneLines + '/' + bl.items.length + ')';
+    }
+  }
+  document.getElementById('blpList').addEventListener('click', function(e){
+    var btn = e.target.closest('[data-role]'); if (!btn) return;
+    var it = activeBL.items[parseInt(btn.getAttribute('data-idx'), 10)];
+    var role = btn.getAttribute('data-role');
+    if (role === 'blpMinus') { it.qtyDone = Math.max(0, it.qtyDone - 1); persistActiveBLItems(); renderBLPicking(); }
+    else if (role === 'blpReset') { it.qtyDone = 0; persistActiveBLItems(); renderBLPicking(); }
+    else if (role === 'blpEdit') {
+      // askInput (fenêtre interne de l'app) et pas window.prompt(), bloqué
+      // dans certains contextes d'aperçu.
+      if (!window.__blAskInput) return;
+      window.__blAskInput('Quantité pour "' + it.designation + '" (requis : ' + it.qtyRequired + ')', String(it.qtyDone), 'numeric').then(function(val){
+        if (val === null) return;
+        var n = parseInt(val, 10);
+        if (!isNaN(n) && n >= 0) it.qtyDone = n;
+        persistActiveBLItems();
+        renderBLPicking();
+      });
+    }
+  });
+
+  var blScanFeedbackTimer = null;
+  function showBLScanFeedback(ok, message){
+    var el = document.getElementById('blScanFeedback');
+    el.style.display = 'block';
+    el.style.background = ok ? 'rgba(63,174,107,0.12)' : 'rgba(221,91,77,0.12)';
+    el.style.color = ok ? 'var(--success)' : 'var(--danger)';
+    el.style.border = '1px solid ' + (ok ? 'var(--success)' : 'var(--danger)');
+    el.textContent = (ok ? '✓ ' : '✕ ') + message;
+    clearTimeout(blScanFeedbackTimer);
+    blScanFeedbackTimer = setTimeout(function(){ el.style.display = 'none'; }, 3500);
+  }
+  document.getElementById('btnCommandeScan').addEventListener('click', function(){
+    if (window.__blStartScan) window.__blStartScan();
+  });
+  // Le scan caméra reste géré par le moteur existant de l'app ; on branche
+  // juste un "but" de scan supplémentaire (commande).
+  window.__blHandleCommandeScan = function(code){
+    if (!activeBL) return;
+    // Un code-barres peut être connu du catalogue sous une référence : on
+    // accepte les deux (code direct, ou référence résolue par le catalogue).
+    var resolvedRef = window.__blCatalogRef ? window.__blCatalogRef(code) : null;
+    var item = activeBL.items.find(function(it){
+      return it.barcode === code || (resolvedRef && it.ref === resolvedRef);
+    });
+    if (window.__blFlashScan) window.__blFlashScan(!!item);
+    if (!item) {
+      showBLScanFeedback(false, 'Pièce hors de ce BL' + (resolvedRef ? ' (' + resolvedRef + ')' : '') + ' — code ' + code);
+      return;
+    }
+    item.qtyDone++;
+    var over = item.qtyDone > item.qtyRequired;
+    showBLScanFeedback(!over, item.ref + (over ? ' — trop compté (' + item.qtyDone + '/' + item.qtyRequired + ')' : ' — ' + item.qtyDone + '/' + item.qtyRequired));
+    persistActiveBLItems();
+    if (!activeBL.isDemo && window.__blLogEvent) {
+      window.__blLogEvent(activeBL.id, activeBL.docNumber, 'item_scanned', { ref: item.ref, qtyDone: item.qtyDone, qtyRequired: item.qtyRequired });
+    }
+    renderBLPicking();
+  };
+  document.getElementById('btnCloseBLPicking').addEventListener('click', closeBLPicking);
+  document.getElementById('btnValidateBL').addEventListener('click', function(){
+    if (document.getElementById('btnValidateBL').disabled) return;
+    var bl = activeBL;
+    if (!bl.isDemo) {
+      if (window.__blAdjustStock) {
+        // Sortie réelle du stock, référence par référence — même mécanisme que
+        // Réception / Préparation / Inventaire, tracée dans le journal.
+        bl.items.forEach(function(it){
+          window.__blAdjustStock(it.ref, -it.qtyRequired, 'commande');
+        });
+      }
+      if (window.__blComplete) window.__blComplete(bl.id, bl.items);
+    }
+    bl.status = 'ready';
+    closeBLPicking();
+  });
+
+  /* ── Ajouter un BL à la file (depuis un texte collé) ── */
+  document.getElementById('btnAddBL').addEventListener('click', function(){
+    document.getElementById('blParserTextInput').value = '';
+    document.getElementById('blParserClientInput').value = '';
+    document.getElementById('blParserResult').innerHTML = '';
+    document.getElementById('blParserModal').classList.add('show');
+  });
+  document.getElementById('btnCloseBLParser').addEventListener('click', function(){
+    document.getElementById('blParserModal').classList.remove('show');
+  });
+  document.getElementById('btnCloseBLParserX').addEventListener('click', function(){
+    document.getElementById('blParserModal').classList.remove('show');
+  });
+  document.getElementById('btnRunBLParser').addEventListener('click', function(){
+    var text = document.getElementById('blParserTextInput').value;
+    var client = document.getElementById('blParserClientInput').value;
+    document.getElementById('blParserResult').innerHTML = renderBLParserResult(text, client);
+  });
+  document.getElementById('btnQueueBL').addEventListener('click', function(){
+    var text = document.getElementById('blParserTextInput').value;
+    var client = (document.getElementById('blParserClientInput').value || '').trim();
+    var parsed = parseBLText(text);
+    if (!parsed.items.length) { showBLParserError('Aucune ligne de pièce reconnue dans ce texte.'); return; }
+    if (!client) { showBLParserError('Indique le nom du client tel qu\'écrit sur le BL.'); return; }
+    var match = matchGarage(client, GARAGES_DATA);
+    var confident = match && match.score >= MATCH_CONFIDENCE_THRESHOLD;
+    var dep = confident ? nextDepartureFor(match.garage) : null;
+    var nowIso = new Date().toISOString();
+    var row = {
+      id: 'bl-' + blUid(),
+      doc_number: parsed.docNumber || '(sans numéro)',
+      doc_date: parsed.docDate || null,
+      client: client,
+      ref_commande: parsed.refCommande || '',
+      garage_name: confident ? match.garage.g : null,
+      carrier_label: dep ? (CARRIER_LABELS[dep.carrier] || dep.carrier) + ' ' + dep.label : null,
+      departure_at: dep ? new Date(dep.at).toISOString() : null,
+      status: 'pending',
+      claimed_by: null,
+      claimed_at: null,
+      items: parsed.items.map(function(it){
+        return { ref: it.refFournisseur, barcode: null, designation: it.designation, qtyRequired: it.qty, qtyDone: 0 };
+      }),
+      created_by: currentUserName(),
+      created_at: nowIso,
+      completed_by: null,
+      completed_at: null,
+      updated_at: nowIso
+    };
+    if (window.__blInsert) window.__blInsert(row);
+    else localUnsyncedBLs.push(rowToLocalBL(row));
+    document.getElementById('blParserModal').classList.remove('show');
+    renderBLQueue();
+  });
+  function showBLParserError(msg){
+    document.getElementById('blParserResult').innerHTML = '<div class="panel" style="border-color:var(--danger);"><b style="color:var(--danger); font-size:13px;">' + blEscapeHtml(msg) + '</b></div>';
+  }
+
+  /* ── Retrait sans BL (ancien écran de préparation directe) ── */
+  document.getElementById('btnPrepDirect').addEventListener('click', function(){
+    document.getElementById('prepMainView').style.display = 'none';
+    document.getElementById('prepDirectView').style.display = 'block';
+    window.scrollTo(0, 0);
+  });
+  document.getElementById('btnBackToPrepFromDirect').addEventListener('click', function(){
+    document.getElementById('prepDirectView').style.display = 'none';
+    document.getElementById('prepMainView').style.display = 'block';
+    renderBLQueue();
+    window.scrollTo(0, 0);
+  });
 })();
 </script>
 </body>
