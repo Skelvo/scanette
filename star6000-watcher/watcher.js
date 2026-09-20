@@ -43,7 +43,16 @@ const CONFIG = {
 
   // true : n'écrit rien dans Supabase, affiche juste ce qui aurait été
   // envoyé — pour calibrer le parseur sur de vrais PDF sans risque.
-  dryRun: process.env.BL_DRY_RUN === '1'
+  dryRun: process.env.BL_DRY_RUN === '1',
+
+  // Nettoyage automatique : les PDF déjà traités avec succès (dans
+  // "traites") sont de toute façon sauvegardés dans Supabase, donc on peut
+  // les effacer du disque après un moment plutôt que de laisser ce dossier
+  // grossir indéfiniment (500-1000 BL/jour, ça remplit vite). Ceux dans
+  // "a_verifier" ont besoin d'un œil humain avant de disparaître : délai
+  // séparé, bien plus long par sécurité.
+  processedRetentionDays: parseInt(process.env.BL_PROCESSED_RETENTION_DAYS || '21', 10),
+  reviewRetentionDays: parseInt(process.env.BL_REVIEW_RETENTION_DAYS || '90', 10)
 };
 
 /* ================= Utilitaires ================= */
@@ -88,6 +97,31 @@ function moveTo(filePath, destFolder) {
   const dest = path.join(destFolder, path.basename(filePath));
   fs.renameSync(filePath, dest);
   return dest;
+}
+
+// Efface les PDF plus vieux que le délai de rétention configuré (par date
+// de dépôt dans le dossier, pas par date d'impression). Une erreur sur un
+// fichier (verrouillé par un antivirus, etc.) ne doit jamais interrompre
+// le nettoyage des autres.
+function cleanupFolder(folder, retentionDays, label) {
+  if (!fs.existsSync(folder) || retentionDays <= 0) return;
+  const cutoff = Date.now() - retentionDays * 24 * 3600 * 1000;
+  let removed = 0;
+  fs.readdirSync(folder).forEach((name) => {
+    const filePath = path.join(folder, name);
+    try {
+      const stats = fs.statSync(filePath);
+      if (stats.isFile() && stats.mtimeMs < cutoff) {
+        fs.unlinkSync(filePath);
+        removed++;
+      }
+    } catch (e) { log('⚠ Nettoyage ' + label + ' : échec sur ' + name + ' (' + e.message + ')'); }
+  });
+  if (removed > 0) log('🧹 Nettoyage ' + label + ' : ' + removed + ' fichier(s) de plus de ' + retentionDays + ' jour(s) supprimé(s).');
+}
+function runCleanup() {
+  cleanupFolder(CONFIG.processedFolder, CONFIG.processedRetentionDays, 'traites');
+  cleanupFolder(CONFIG.reviewFolder, CONFIG.reviewRetentionDays, 'a_verifier');
 }
 
 /* ================= Supabase (REST direct, pas de SDK nécessaire) ================= */
@@ -206,6 +240,9 @@ ensureDir(CONFIG.reviewFolder);
 log('=== Watcher BL Star6000 démarré ===');
 log('Dossier surveillé : ' + CONFIG.watchFolder);
 log(CONFIG.dryRun ? 'Mode DRY RUN (rien n\'est envoyé à Supabase)' : 'Connecté à ' + CONFIG.supabaseUrl);
+
+runCleanup();
+setInterval(runCleanup, 6 * 3600 * 1000);
 
 const watcher = chokidar.watch(CONFIG.watchFolder, {
   ignoreInitial: false,
