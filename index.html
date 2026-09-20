@@ -132,16 +132,16 @@
   .icon{ width:1.15em; height:1.15em; display:inline-block; vertical-align:-0.18em; flex-shrink:0;
     fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
   .icon-fill{ fill:currentColor; stroke:none; }
-  .head-actions{ display:flex; align-items:center; gap:6px; }
+  .head-actions{ display:flex; align-items:center; gap:4px; }
   .icon-btn{
-    width:34px; height:34px; border-radius:50%; border:1px solid var(--line);
+    width:30px; height:30px; border-radius:50%; border:1px solid var(--line);
     background:var(--surface); color:var(--text-dim); display:flex; align-items:center; justify-content:center;
-    font-size:15px; padding:0;
+    font-size:13px; padding:0; flex-shrink:0;
   }
   .sync-dot{
-    width:34px; height:34px; border-radius:50%; border:1px solid var(--line);
+    width:30px; height:30px; border-radius:50%; border:1px solid var(--line);
     background:var(--surface); color:var(--text-dim); display:flex; align-items:center; justify-content:center;
-    font-size:14px;
+    font-size:13px; flex-shrink:0;
   }
   .sync-dot.on{ border-color:var(--success); color:var(--success); }
   .sync-dot.off{ border-color:var(--text-faint); color:var(--text-faint); }
@@ -493,6 +493,10 @@
     <div class="brand-row">
       <div class="brand"><span class="mark"><svg class="icon"><use href="#i-box"/></svg></span> Scanette</div>
       <div class="head-actions">
+        <button class="icon-btn" id="menuCatalog" title="Catalogue"><svg class="icon"><use href="#i-book"/></svg></button>
+        <button class="icon-btn" id="menuLocations" title="Emplacements"><svg class="icon"><use href="#i-pin"/></svg></button>
+        <button class="icon-btn" id="menuHistory" title="Historique"><svg class="icon"><use href="#i-clock"/></svg></button>
+        <button class="icon-btn" id="menuStockCorrect" title="Corriger le stock"><svg class="icon"><use href="#i-refresh"/></svg></button>
         <div class="sync-dot off" id="syncDot" title="Catalogue partagé : hors ligne"><svg class="icon"><use href="#i-cloud"/></svg></div>
         <button class="icon-btn" id="moreMenuBtn" title="Menu"><svg class="icon"><use href="#i-dots"/></svg></button>
       </div>
@@ -577,7 +581,7 @@
         <p><b>Rotation des références</b> (menu •••) : classe les références par quantité totale sortie en Préparation, pour repérer ce qui part vite (ou pas du tout).</p>
         <p><b>Inventaire annuel</b> (onglet en haut) : scanne d'abord le code-barres d'un rayon — impossible de compter quoi que ce soit avant. Une fois ouvert, il liste tout ce qui doit s'y trouver (via Emplacements) et "Terminer le rayon" reste bloqué tant qu'il en manque. "Voir le rapport global" additionne les rayons terminés et affiche les écarts avec le stock système, exportables ou corrigeables en un clic (code de correction requis).</p>
         <p><b>Prénom</b> : sert à savoir qui a compté quoi (affiché sur les lignes et dans les exports), et à voir qui d'autre a l'app ouverte en même temps. <button id="btnChangeUserName" style="display:inline; background:none; border:none; padding:0; margin:0; font-size:12.5px; font-family:inherit; color:var(--accent); font-weight:700;">Ton prénom : <span id="userNameDisplay">(non défini)</span> — toucher pour changer</button></p>
-        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v69 — 20/09</b></p>
+        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v70 — 20/09</b></p>
       </div>
     </div>
   </div>
@@ -810,10 +814,6 @@
   <div class="sheet">
     <h2>Menu</h2>
     <div class="move-list">
-      <button id="menuCatalog"><svg class="icon"><use href="#i-book"/></svg> Catalogue</button>
-      <button id="menuLocations"><svg class="icon"><use href="#i-pin"/></svg> Emplacements</button>
-      <button id="menuHistory"><svg class="icon"><use href="#i-clock"/></svg> Historique</button>
-      <button id="menuStockCorrect"><svg class="icon"><use href="#i-refresh"/></svg> Corriger le stock</button>
       <button id="menuStockCorrectPinChange"><svg class="icon"><use href="#i-refresh"/></svg> Changer le code de correction</button>
       <button id="menuStockThreshold"><svg class="icon"><use href="#i-alert"/></svg> Seuil d'alerte stock bas</button>
       <button id="menuStockExport"><svg class="icon"><use href="#i-file"/></svg> Exporter le stock (CSV)</button>
