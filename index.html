@@ -428,6 +428,12 @@
   .scan-flash.hit{ animation:flash .3s; }
   @keyframes flash{ 0%{opacity:.5;} 100%{opacity:0;} }
 
+  #cameraSleepBanner{ display:none; position:absolute; top:60px; left:0; right:0; bottom:0; z-index:4; background:rgba(0,0,0,.72); align-items:center; justify-content:center; text-align:center; padding:24px; }
+  #cameraSleepBanner.show{ display:flex; }
+  #cameraSleepBanner .sleep-box{ display:flex; flex-direction:column; align-items:center; gap:12px; color:#fff; }
+  #cameraSleepBanner .sleep-box svg{ width:34px; height:34px; opacity:.8; }
+  #cameraSleepBanner p{ font-size:13.5px; line-height:1.5; margin:0; }
+
   .toast{
     position:fixed; bottom:96px; left:50%; transform:translateX(-50%) translateY(20px); z-index:250;
     background:var(--surface-3); color:var(--text); border:1px solid var(--line); padding:11px 18px; border-radius:30px;
@@ -586,7 +592,7 @@
         <p><b>Rotation des références</b> (menu •••) : classe les références par quantité totale sortie en Préparation, pour repérer ce qui part vite (ou pas du tout).</p>
         <p><b>Inventaire annuel</b> (onglet en haut) : scanne d'abord le code-barres d'un rayon — impossible de compter quoi que ce soit avant. Une fois ouvert, il liste tout ce qui doit s'y trouver (via Emplacements) et "Terminer le rayon" reste bloqué tant qu'il en manque. "Voir le rapport global" additionne les rayons terminés et affiche les écarts avec le stock système, exportables ou corrigeables en un clic (code de correction requis).</p>
         <p><b>Prénom</b> : sert à savoir qui a compté quoi (affiché sur les lignes et dans les exports), et à voir qui d'autre a l'app ouverte en même temps. <button id="btnChangeUserName" style="display:inline; background:none; border:none; padding:0; margin:0; font-size:12.5px; font-family:inherit; color:var(--accent); font-weight:700;">Ton prénom : <span id="userNameDisplay">(non défini)</span> — toucher pour changer</button></p>
-        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v78 — 22/09</b></p>
+        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v79 — 22/09</b></p>
       </div>
     </div>
   </div>
@@ -783,6 +789,12 @@
   </div>
   <div id="interactive"><video id="scanVideo" autoplay playsinline muted></video><div class="scan-flash" id="scanFlash"></div></div>
   <div class="scan-frame"></div>
+  <div id="cameraSleepBanner">
+    <div class="sleep-box">
+      <svg class="icon"><use href="#i-camera"/></svg>
+      <p>Caméra en veille pour économiser la batterie<br><b>Retape pour reprendre le scan</b></p>
+    </div>
+  </div>
   <div class="zoom-ctrl" id="zoomCtrl">
     <button id="zoomIn">+</button>
     <input type="range" id="zoomRange" min="1" max="3" step="0.1" value="1">
@@ -2472,6 +2484,19 @@
   // probablement la vraie source de la chauffe — pas la détection en
   // elle-même, déjà ralentie et recadrée.
   var scanCameraHalted = false;
+  // Veille caméra sur image noire prolongée (téléphone posé face contre la
+  // table pendant une pause) : la caméra reste le vrai poste de chauffe
+  // (voir plus haut), donc autant l'arrêter pour de vrai plutôt que de la
+  // laisser filmer le bureau. Détecté par un échantillonnage très léger
+  // (16×12 px) de l'image vidéo, indépendant du décodage de codes-barres.
+  // Pas de réveil automatique (pas de flux vidéo à observer une fois la
+  // caméra coupée) : un tap sur le bandeau relance normalement.
+  var BLACK_FRAME_THRESHOLD = 8; // luminance moyenne 0-255 en dessous de laquelle l'image est jugée "noire"
+  var BLACK_FRAME_SLEEP_MS = 3000;
+  var blackFrameTimer = null;
+  var blackFrameSinceMs = null;
+  var cameraAsleep = false;
+  var blackFrameCanvas = null;
   // 1280x720 plutôt que le Full HD d'avant : reste largement net pour un
   // code-barres (même petit ou abîmé), mais nettement moins de pixels à
   // traiter à chaque image — ça fait une vraie différence sur la chauffe,
@@ -2569,6 +2594,7 @@
         scanState.stream = stream;
         video.srcObject = stream;
         setupCameraControls(stream.getVideoTracks()[0]);
+        startBlackFrameWatch();
         scanState.timer = setInterval(function(){
           if(detectBusy || scanningPaused) return;
           detectBusy = true;
@@ -2631,6 +2657,7 @@
     ).then(function(){
       var track = video.srcObject && video.srcObject.getVideoTracks()[0];
       if(track) setupCameraControls(track);
+      startBlackFrameWatch();
     }).catch(function(err){ toast('Impossible d\'accéder à la caméra'); console.error(err); });
   }
 
@@ -2640,6 +2667,7 @@
   // rallume à la sortie de pause, dans le même mode qu'avant.
   function pauseScanning(){
     scanningPaused = true;
+    stopBlackFrameWatch();
     if(scanCameraHalted) return;
     scanCameraHalted = true;
     if(scanState.timer){ clearInterval(scanState.timer); scanState.timer = null; }
@@ -2660,6 +2688,57 @@
     if(scanState.mode === 'native') acquireNativeCamera(video);
     else if(scanState.mode === 'zxing-full') startZXingScanFullFrame(video);
   }
+
+  function sampleVideoBrightness(video){
+    try{
+      if(!video.videoWidth) return null; // pas encore de première image
+      if(!blackFrameCanvas) blackFrameCanvas = document.createElement('canvas');
+      var w = 16, h = 12;
+      blackFrameCanvas.width = w; blackFrameCanvas.height = h;
+      var ctx = blackFrameCanvas.getContext('2d', { willReadFrequently: true });
+      ctx.drawImage(video, 0, 0, w, h);
+      var data = ctx.getImageData(0, 0, w, h).data;
+      var total = 0, n = 0;
+      for(var i = 0; i < data.length; i += 4){
+        total += (data[i] + data[i+1] + data[i+2]) / 3;
+        n++;
+      }
+      return n ? total / n : null;
+    }catch(e){ return null; } // ex. frame pas encore décodable — on retente au prochain tick
+  }
+  function startBlackFrameWatch(){
+    stopBlackFrameWatch();
+    blackFrameSinceMs = null;
+    blackFrameTimer = setInterval(function(){
+      if(scanningPaused || cameraAsleep) return;
+      var video = document.getElementById('scanVideo');
+      if(!video) return;
+      var brightness = sampleVideoBrightness(video);
+      if(brightness == null) return;
+      if(brightness < BLACK_FRAME_THRESHOLD){
+        if(blackFrameSinceMs == null) blackFrameSinceMs = Date.now();
+        else if(Date.now() - blackFrameSinceMs >= BLACK_FRAME_SLEEP_MS) sleepCameraForBlackFrame();
+      } else {
+        blackFrameSinceMs = null;
+      }
+    }, 400);
+  }
+  function stopBlackFrameWatch(){
+    if(blackFrameTimer){ clearInterval(blackFrameTimer); blackFrameTimer = null; }
+    blackFrameSinceMs = null;
+  }
+  function sleepCameraForBlackFrame(){
+    cameraAsleep = true;
+    pauseScanning();
+    document.getElementById('cameraSleepBanner').classList.add('show');
+  }
+  function wakeCameraFromSleep(){
+    if(!cameraAsleep) return;
+    cameraAsleep = false;
+    document.getElementById('cameraSleepBanner').classList.remove('show');
+    resumeScanning();
+  }
+  document.getElementById('cameraSleepBanner').addEventListener('click', wakeCameraFromSleep);
 
   // Flash/torche : très utile sur étiquettes brillantes, sombres ou mal éclairées.
   // Le bouton reste caché si l'appareil ne l'expose pas (iPhone Safari, notamment).
@@ -2721,6 +2800,9 @@
 
   function stopScan(){
     $overlay.classList.remove('show');
+    stopBlackFrameWatch();
+    cameraAsleep = false;
+    document.getElementById('cameraSleepBanner').classList.remove('show');
     if(scanState.timer){ clearInterval(scanState.timer); scanState.timer = null; }
     if(scanState.stream){ scanState.stream.getTracks().forEach(function(t){ t.stop(); }); scanState.stream = null; }
     if(codeReader){ try{ codeReader.reset(); }catch(e){} }
