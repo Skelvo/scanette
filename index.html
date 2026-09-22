@@ -586,7 +586,7 @@
         <p><b>Rotation des références</b> (menu •••) : classe les références par quantité totale sortie en Préparation, pour repérer ce qui part vite (ou pas du tout).</p>
         <p><b>Inventaire annuel</b> (onglet en haut) : scanne d'abord le code-barres d'un rayon — impossible de compter quoi que ce soit avant. Une fois ouvert, il liste tout ce qui doit s'y trouver (via Emplacements) et "Terminer le rayon" reste bloqué tant qu'il en manque. "Voir le rapport global" additionne les rayons terminés et affiche les écarts avec le stock système, exportables ou corrigeables en un clic (code de correction requis).</p>
         <p><b>Prénom</b> : sert à savoir qui a compté quoi (affiché sur les lignes et dans les exports), et à voir qui d'autre a l'app ouverte en même temps. <button id="btnChangeUserName" style="display:inline; background:none; border:none; padding:0; margin:0; font-size:12.5px; font-family:inherit; color:var(--accent); font-weight:700;">Ton prénom : <span id="userNameDisplay">(non défini)</span> — toucher pour changer</button></p>
-        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v77 — 22/09</b></p>
+        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v78 — 22/09</b></p>
       </div>
     </div>
   </div>
@@ -1423,8 +1423,14 @@
       var catalogRows = [];
       var CATALOG_PAGE = 1000;
       var from = 0;
+      // .order() est indispensable ici : sans tri explicite, Postgres ne
+      // garantit pas le même ordre entre deux requêtes .range() séparées —
+      // avec des lignes ajoutées en continu par toute l'équipe pendant que
+      // ces ~13 pages se chargent, certaines lignes pouvaient sauter
+      // silencieusement une page (code jamais chargé sur cet appareil, donc
+      // jamais reconnu au scan, même si déjà bien enregistré en base).
       while(true){
-        var page = await db.from('catalog').select('code, ref').range(from, from + CATALOG_PAGE - 1);
+        var page = await db.from('catalog').select('code, ref').order('code', { ascending: true }).range(from, from + CATALOG_PAGE - 1);
         if(page.error) throw page.error;
         var rows = page.data || [];
         catalogRows = catalogRows.concat(rows);
@@ -1531,7 +1537,7 @@
       var LOCATIONS_LOAD_PAGE = 1000;
       var locFrom = 0;
       while(true){
-        var locPage = await db.from('locations').select('ref, locs').range(locFrom, locFrom + LOCATIONS_LOAD_PAGE - 1);
+        var locPage = await db.from('locations').select('ref, locs').order('ref', { ascending: true }).range(locFrom, locFrom + LOCATIONS_LOAD_PAGE - 1);
         if(locPage.error) throw locPage.error;
         var locRows = locPage.data || [];
         locationRows = locationRows.concat(locRows);
@@ -1599,7 +1605,7 @@
       var STOCK_LOAD_PAGE = 1000;
       var stockFrom = 0;
       while(true){
-        var stockPage = await db.from('stock').select('ref, qty').range(stockFrom, stockFrom + STOCK_LOAD_PAGE - 1);
+        var stockPage = await db.from('stock').select('ref, qty').order('ref', { ascending: true }).range(stockFrom, stockFrom + STOCK_LOAD_PAGE - 1);
         if(stockPage.error) throw stockPage.error;
         var stockPageRows = stockPage.data || [];
         stockRows = stockRows.concat(stockPageRows);
