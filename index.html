@@ -249,8 +249,11 @@
   .qty-stepper .q{ font-family:var(--font-mono); font-weight:800; font-size:20px; min-width:34px; text-align:center; }
   .price-tag{ display:block; margin:3px 0; padding:2px 8px; border:1px dashed var(--line); border-radius:10px; font-size:10.5px; color:var(--accent); background:none; font-family:var(--font-mono); max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; box-sizing:border-box; }
   .price-tag.set{ border-style:solid; border-color:var(--line); color:var(--text-dim); }
-  .point-tag.set{ border-style:solid; font-weight:700; }
-  .point-tag.done{ font-weight:800; }
+  .point-stepper{ display:inline-flex; align-items:center; margin:3px 0; border:1px dashed var(--line); border-radius:10px; font-family:var(--font-mono); color:var(--accent); overflow:hidden; }
+  .point-stepper.active{ border-style:solid; font-weight:700; }
+  .point-stepper.done{ font-weight:800; }
+  .point-stepper button{ background:rgba(0,0,0,.06); border:none; color:inherit; font-size:13px; font-weight:800; width:22px; height:22px; flex-shrink:0; display:flex; align-items:center; justify-content:center; padding:0; line-height:1; }
+  .point-stepper .point-label{ padding:0 7px; font-size:10.5px; white-space:nowrap; }
   .row-icon-btn{ background:none; border:none; color:var(--text-faint); font-size:15px; padding:6px; flex-shrink:0; }
   .row-icon-btn:active{ color:var(--text); }
   .row-icon-btn.danger{ color:var(--danger); }
@@ -592,7 +595,7 @@
         <p><b>Rotation des références</b> (menu •••) : classe les références par quantité totale sortie en Préparation, pour repérer ce qui part vite (ou pas du tout).</p>
         <p><b>Inventaire annuel</b> (onglet en haut) : scanne d'abord le code-barres d'un rayon — impossible de compter quoi que ce soit avant. Une fois ouvert, il liste tout ce qui doit s'y trouver (via Emplacements) et "Terminer le rayon" reste bloqué tant qu'il en manque. "Voir le rapport global" additionne les rayons terminés et affiche les écarts avec le stock système, exportables ou corrigeables en un clic (code de correction requis).</p>
         <p><b>Prénom</b> : sert à savoir qui a compté quoi (affiché sur les lignes et dans les exports), et à voir qui d'autre a l'app ouverte en même temps. <button id="btnChangeUserName" style="display:inline; background:none; border:none; padding:0; margin:0; font-size:12.5px; font-family:inherit; color:var(--accent); font-weight:700;">Ton prénom : <span id="userNameDisplay">(non défini)</span> — toucher pour changer</button></p>
-        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v80 — 22/09</b></p>
+        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v81 — 22/09</b></p>
       </div>
     </div>
   </div>
@@ -2196,7 +2199,11 @@
         var pointDone = it.qty > 0 && pointed >= it.qty;
         var pointLabel = pointed > 0 ? ('📍 ' + pointed + '/' + it.qty + (pointDone ? ' ✓' : '')) : '📍 Pointer';
         var pointStyle = pointGradientStyle(pointed, it.qty);
-        html += '<button class="price-tag point-tag'+(pointed>0?' set':'')+(pointDone?' done':'')+'" data-role="point" style="'+pointStyle+'" title="Compteur de pointage manuel (contre un BL papier) — ne touche pas au stock">'+escapeHtml(pointLabel)+'</button>';
+        html += '<div class="point-stepper'+(pointed>0?' active':'')+(pointDone?' done':'')+'" style="'+pointStyle+'" title="Compteur de pointage manuel (contre un BL papier) — ne touche pas au stock">';
+        html += '<button data-role="pointDown">−</button>';
+        html += '<span class="point-label" data-role="pointVal">'+escapeHtml(pointLabel)+'</span>';
+        html += '<button data-role="pointUp">+</button>';
+        html += '</div>';
         var itLocs = locations[it.ref] || [];
         var locLabel = itLocs.length ? itLocs.join(' · ') : '+ lieu';
         html += '<button class="price-tag'+(itLocs.length?' set':'')+'" data-role="location">'+escapeHtml(locLabel)+'</button>';
@@ -3123,15 +3130,30 @@
       });
       return;
     }
-    if(role === 'point'){
-      // Compteur de pointage manuel, distinct de la quantité réelle en
-      // stock (it.qty) — pensé pour vérifier une référence reçue en
-      // plusieurs fois sur plusieurs BL papier sans jamais faire bouger le
-      // stock. Reste affiché tant qu'on ne le retape pas volontairement une
-      // fois au max (pas de remise à zéro automatique).
-      var pointedNow = item.pointed || 0;
-      item.pointed = (item.qty > 0 && pointedNow >= item.qty) ? 0 : pointedNow + 1;
+    // Compteur de pointage manuel, distinct de la quantité réelle en stock
+    // (it.qty) — pensé pour vérifier une référence reçue en plusieurs fois
+    // sur plusieurs BL papier sans jamais faire bouger le stock. Un vrai
+    // −/+ (comme la quantité) plutôt qu'un simple "tap = +1, retap au max
+    // = 0" : une erreur de tap se corrige d'un cran, pas en recommençant à zéro.
+    if(role === 'pointUp'){
+      var pointedUp = item.pointed || 0;
+      item.pointed = item.qty > 0 ? Math.min(item.qty, pointedUp + 1) : pointedUp + 1;
       saveState(); renderGroups();
+      return;
+    }
+    if(role === 'pointDown'){
+      item.pointed = Math.max(0, (item.pointed || 0) - 1);
+      saveState(); renderGroups();
+      return;
+    }
+    if(role === 'pointVal'){
+      askInput('Pointé pour "' + item.ref + '" (sur ' + item.qty + ')', String(item.pointed || 0), 'numeric').then(function(nv){
+        if(nv === null) return;
+        nv = parseInt(nv, 10);
+        if(isNaN(nv) || nv < 0){ toast('Valeur invalide'); return; }
+        item.pointed = item.qty > 0 ? Math.min(item.qty, nv) : nv;
+        saveState(); renderGroups();
+      });
       return;
     }
     if(role === 'location'){
