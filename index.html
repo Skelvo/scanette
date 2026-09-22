@@ -249,6 +249,8 @@
   .qty-stepper .q{ font-family:var(--font-mono); font-weight:800; font-size:20px; min-width:34px; text-align:center; }
   .price-tag{ display:block; margin:3px 0; padding:2px 8px; border:1px dashed var(--line); border-radius:10px; font-size:10.5px; color:var(--accent); background:none; font-family:var(--font-mono); max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; box-sizing:border-box; }
   .price-tag.set{ border-style:solid; border-color:var(--line); color:var(--text-dim); }
+  .point-tag.set{ border-style:solid; border-color:var(--danger); color:var(--danger); }
+  .point-tag.done{ background:rgba(221,91,77,0.12); font-weight:700; }
   .row-icon-btn{ background:none; border:none; color:var(--text-faint); font-size:15px; padding:6px; flex-shrink:0; }
   .row-icon-btn:active{ color:var(--text); }
   .row-icon-btn.danger{ color:var(--danger); }
@@ -584,7 +586,7 @@
         <p><b>Rotation des références</b> (menu •••) : classe les références par quantité totale sortie en Préparation, pour repérer ce qui part vite (ou pas du tout).</p>
         <p><b>Inventaire annuel</b> (onglet en haut) : scanne d'abord le code-barres d'un rayon — impossible de compter quoi que ce soit avant. Une fois ouvert, il liste tout ce qui doit s'y trouver (via Emplacements) et "Terminer le rayon" reste bloqué tant qu'il en manque. "Voir le rapport global" additionne les rayons terminés et affiche les écarts avec le stock système, exportables ou corrigeables en un clic (code de correction requis).</p>
         <p><b>Prénom</b> : sert à savoir qui a compté quoi (affiché sur les lignes et dans les exports), et à voir qui d'autre a l'app ouverte en même temps. <button id="btnChangeUserName" style="display:inline; background:none; border:none; padding:0; margin:0; font-size:12.5px; font-family:inherit; color:var(--accent); font-weight:700;">Ton prénom : <span id="userNameDisplay">(non défini)</span> — toucher pour changer</button></p>
-        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v76 — 22/09</b></p>
+        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v77 — 22/09</b></p>
       </div>
     </div>
   </div>
@@ -2160,6 +2162,10 @@
         html += '<div class="chk'+(checked?' on':'')+'" data-role="chk">'+(checked?'✓':'')+'</div>';
         html += '<div class="ref"><div class="r1">'+refBreakHtml(it.ref)+'</div>';
         html += '<button class="price-tag'+(it.price!=null?' set':'')+'" data-role="price">'+escapeHtml(priceLabel)+'</button>';
+        var pointed = it.pointed || 0;
+        var pointDone = it.qty > 0 && pointed >= it.qty;
+        var pointLabel = pointed > 0 ? ('📍 ' + pointed + '/' + it.qty + (pointDone ? ' ✓' : '')) : '📍 Pointer';
+        html += '<button class="price-tag point-tag'+(pointed>0?' set':'')+(pointDone?' done':'')+'" data-role="point" title="Compteur de pointage manuel (contre un BL papier) — ne touche pas au stock">'+escapeHtml(pointLabel)+'</button>';
         var itLocs = locations[it.ref] || [];
         var locLabel = itLocs.length ? itLocs.join(' · ') : '+ lieu';
         html += '<button class="price-tag'+(itLocs.length?' set':'')+'" data-role="location">'+escapeHtml(locLabel)+'</button>';
@@ -2982,6 +2988,7 @@
     if(role === 'qdown'){
       var prevQtyDown = item.qty;
       item.qty = Math.max(0, item.qty - 1);
+      if(item.pointed) item.pointed = Math.min(item.pointed, item.qty);
       if(item.qty === 0){ supplier.items = supplier.items.filter(function(it){ return it.id !== itemId; }); }
       saveState(); renderAll();
       recordLastAction(supplier, item, false, prevQtyDown);
@@ -2994,6 +3001,7 @@
         if(isNaN(nv) || nv < 0){ toast('Quantité invalide'); return; }
         var prevQtyVal = item.qty;
         item.qty = nv;
+        if(item.pointed) item.pointed = Math.min(item.pointed, item.qty);
         if(nv === 0){ supplier.items = supplier.items.filter(function(it){ return it.id !== itemId; }); }
         saveState(); renderAll();
         recordLastAction(supplier, item, false, prevQtyVal);
@@ -3012,6 +3020,17 @@
         }
         saveState(); renderAll();
       });
+      return;
+    }
+    if(role === 'point'){
+      // Compteur de pointage manuel, distinct de la quantité réelle en
+      // stock (it.qty) — pensé pour vérifier une référence reçue en
+      // plusieurs fois sur plusieurs BL papier sans jamais faire bouger le
+      // stock. Reste affiché tant qu'on ne le retape pas volontairement une
+      // fois au max (pas de remise à zéro automatique).
+      var pointedNow = item.pointed || 0;
+      item.pointed = (item.qty > 0 && pointedNow >= item.qty) ? 0 : pointedNow + 1;
+      saveState(); renderGroups();
       return;
     }
     if(role === 'location'){
