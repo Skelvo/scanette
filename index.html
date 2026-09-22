@@ -584,7 +584,7 @@
         <p><b>Rotation des références</b> (menu •••) : classe les références par quantité totale sortie en Préparation, pour repérer ce qui part vite (ou pas du tout).</p>
         <p><b>Inventaire annuel</b> (onglet en haut) : scanne d'abord le code-barres d'un rayon — impossible de compter quoi que ce soit avant. Une fois ouvert, il liste tout ce qui doit s'y trouver (via Emplacements) et "Terminer le rayon" reste bloqué tant qu'il en manque. "Voir le rapport global" additionne les rayons terminés et affiche les écarts avec le stock système, exportables ou corrigeables en un clic (code de correction requis).</p>
         <p><b>Prénom</b> : sert à savoir qui a compté quoi (affiché sur les lignes et dans les exports), et à voir qui d'autre a l'app ouverte en même temps. <button id="btnChangeUserName" style="display:inline; background:none; border:none; padding:0; margin:0; font-size:12.5px; font-family:inherit; color:var(--accent); font-weight:700;">Ton prénom : <span id="userNameDisplay">(non défini)</span> — toucher pour changer</button></p>
-        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v75 — 22/09</b></p>
+        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v76 — 22/09</b></p>
       </div>
     </div>
   </div>
@@ -1219,6 +1219,14 @@
       if(s) return s;
     }
     return ax.length - bx.length;
+  }
+  // Tri "lettre par lettre" (comme un bon de livraison papier) : compare
+  // caractère par caractère sans regrouper les chiffres collés en un seul
+  // nombre — contrairement à naturalCompare, "6223MC" passe donc avant
+  // "6PK1320" (chiffre '2' < lettre 'P'), comme sur un vrai BL fournisseur.
+  function blCompare(a, b){
+    var x = String(a == null ? '' : a), y = String(b == null ? '' : b);
+    return x < y ? -1 : (x > y ? 1 : 0);
   }
   var scanStep = 1;
   var prepStep = 1; // multiplicateur de retrait, séparé de scanStep (réception)
@@ -2127,6 +2135,7 @@
         return it.ref.toLowerCase().indexOf(q) !== -1 || itemCodes(it).some(function(c){ return c.indexOf(q) !== -1; });
       }) : s.items.slice();
       if(sortMode === 'alpha'){ items = items.slice().sort(function(a,b){ return naturalCompare(a.ref, b.ref); }); }
+      else if(sortMode === 'bl'){ items = items.slice().sort(function(a,b){ return blCompare(a.ref, b.ref); }); }
       return { supplier: s, items: items };
     }).filter(function(g){ return g.items.length > 0; });
 
@@ -3063,11 +3072,17 @@
     document.getElementById('listFilter').focus();
   });
 
+  var SORT_MODE_NEXT = { scan: 'alpha', alpha: 'bl', bl: 'scan' };
+  var SORT_MODE_LABEL = { scan: 'Tri : ordre de scan', alpha: 'Tri : A → Z', bl: 'Tri : comme un BL papier' };
   function renderSortToggle(){
     var btn = document.getElementById('btnSortToggle');
     if(sortMode === 'alpha'){
       btn.textContent = 'A↓Z';
-      btn.title = 'Trié par ordre alphanumérique — toucher pour revenir à l\'ordre de scan';
+      btn.title = 'Trié par ordre alphanumérique — toucher pour trier comme un bon de livraison papier';
+      btn.classList.add('active');
+    } else if(sortMode === 'bl'){
+      btn.textContent = 'BL';
+      btn.title = 'Trié lettre par lettre, comme un bon de livraison papier — toucher pour revenir à l\'ordre de scan';
       btn.classList.add('active');
     } else {
       btn.innerHTML = '<svg class="icon"><use href="#i-clock"/></svg>';
@@ -3076,11 +3091,11 @@
     }
   }
   document.getElementById('btnSortToggle').addEventListener('click', function(){
-    sortMode = sortMode === 'alpha' ? 'scan' : 'alpha';
+    sortMode = SORT_MODE_NEXT[sortMode] || 'scan';
     try{ localStorage.setItem(SORT_KEY, sortMode); }catch(e){}
     renderSortToggle();
     renderGroups();
-    toast(sortMode === 'alpha' ? 'Tri : A → Z' : 'Tri : ordre de scan');
+    toast(SORT_MODE_LABEL[sortMode] || sortMode);
   });
 
   /* ================= Selection bar ================= */
