@@ -527,6 +527,9 @@
         </div>
       </div>
       <div class="row-btn2">
+        <button class="btn-ghost" id="btnSearchRef" style="flex:1 1 100%;"><svg class="icon"><use href="#i-search"/></svg> Chercher par référence (code connu)</button>
+      </div>
+      <div class="row-btn2">
         <button class="btn-ghost" id="btnPhotoRef" style="flex:1 1 100%;"><svg class="icon"><use href="#i-camera"/></svg> Référence texte seule (sans code-barres)</button>
       </div>
       <div class="supplier-bar">
@@ -581,7 +584,7 @@
         <p><b>Rotation des références</b> (menu •••) : classe les références par quantité totale sortie en Préparation, pour repérer ce qui part vite (ou pas du tout).</p>
         <p><b>Inventaire annuel</b> (onglet en haut) : scanne d'abord le code-barres d'un rayon — impossible de compter quoi que ce soit avant. Une fois ouvert, il liste tout ce qui doit s'y trouver (via Emplacements) et "Terminer le rayon" reste bloqué tant qu'il en manque. "Voir le rapport global" additionne les rayons terminés et affiche les écarts avec le stock système, exportables ou corrigeables en un clic (code de correction requis).</p>
         <p><b>Prénom</b> : sert à savoir qui a compté quoi (affiché sur les lignes et dans les exports), et à voir qui d'autre a l'app ouverte en même temps. <button id="btnChangeUserName" style="display:inline; background:none; border:none; padding:0; margin:0; font-size:12.5px; font-family:inherit; color:var(--accent); font-weight:700;">Ton prénom : <span id="userNameDisplay">(non défini)</span> — toucher pour changer</button></p>
-        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v73 — 20/09</b></p>
+        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v74 — 22/09</b></p>
       </div>
     </div>
   </div>
@@ -862,6 +865,20 @@
     <input class="field" id="photoRefInput" placeholder="Référence" autocapitalize="characters">
     <button class="btn-primary" id="btnAddPhotoRef"><svg class="icon"><use href="#i-plus"/></svg> Ajouter et continuer</button>
     <button class="btn-secondary" id="btnDonePhotoRef">Terminer</button>
+  </div>
+</div>
+
+<!-- Chercher par référence (scan impossible mais code déjà connu) -->
+<div class="modal-backdrop" id="searchRefModal">
+  <div class="sheet" style="max-height:90vh;">
+    <div class="sheet-head"><h2>Chercher une référence</h2><button class="row-icon-btn" id="btnCloseSearchRefX" title="Fermer">✕</button></div>
+    <p class="sub">Le scan ne passe pas ? Tape le nom du produit, vérifie que le code-barres affiché correspond bien à celui sur l'emballage, puis tape sur la ligne — ça compte +1 comme un scan.</p>
+    <div class="search-field">
+      <svg class="icon search-field-icon"><use href="#i-search"/></svg>
+      <input class="field" id="searchRefFilter" placeholder="Nom du produit...">
+    </div>
+    <div id="searchRefList"></div>
+    <button class="btn-secondary" id="btnCloseSearchRef">Fermer</button>
   </div>
 </div>
 
@@ -2873,6 +2890,60 @@
     toast('✓ ' + val + ' ajouté');
   });
   document.getElementById('btnDonePhotoRef').addEventListener('click', function(){ $photoRefModal.classList.remove('show'); });
+
+  /* ================= Chercher par référence (scan impossible) =================
+     Le scanner peut échouer à lire un code-barres réel (étiquette abîmée,
+     surface courbe d'un bidon...) alors que ce produit est déjà connu. Plutôt
+     que de forcer à retaper tout le code à la main, on cherche par nom et on
+     réutilise le code-barres déjà en base — ça compte exactement comme un
+     scan réussi (même chemin que handleScannedCode). */
+  var $searchRefModal = document.getElementById('searchRefModal');
+  var searchRefFilterText = '';
+  var SEARCH_REF_MAX_ROWS = 30;
+  function renderSearchRefList(){
+    var wrap = document.getElementById('searchRefList');
+    var q = searchRefFilterText.trim().toLowerCase();
+    if(q.length < 2){
+      wrap.innerHTML = '<div class="empty-state"><p>Tape au moins 2 lettres du nom du produit.</p></div>';
+      return;
+    }
+    var codes = Object.keys(catalog).filter(function(c){
+      return catalog[c] && catalog[c].toLowerCase().indexOf(q) !== -1;
+    }).sort(function(a, b){ return naturalCompare(catalog[a], catalog[b]); });
+    if(!codes.length){
+      wrap.innerHTML = '<div class="empty-state"><p>Aucune référence connue ne contient "' + escapeHtml(searchRefFilterText) + '".</p></div>';
+      return;
+    }
+    var truncated = codes.length > SEARCH_REF_MAX_ROWS;
+    var shown = truncated ? codes.slice(0, SEARCH_REF_MAX_ROWS) : codes;
+    var html = '';
+    shown.forEach(function(code){
+      html += '<div class="catalog-row" data-code="' + escapeHtml(code) + '" style="cursor:pointer;">';
+      html += '<div class="ref-wrap"><div class="ref">' + refBreakHtml(catalog[code]) + '</div><div class="code">' + escapeHtml(code) + '</div></div>';
+      html += '</div>';
+    });
+    if(truncated) html += '<div class="empty-state"><p>+ ' + (codes.length - SEARCH_REF_MAX_ROWS) + ' autre(s) — affine ta recherche.</p></div>';
+    wrap.innerHTML = html;
+  }
+  document.getElementById('btnSearchRef').addEventListener('click', function(){
+    searchRefFilterText = '';
+    document.getElementById('searchRefFilter').value = '';
+    renderSearchRefList();
+    $searchRefModal.classList.add('show');
+    setTimeout(function(){ document.getElementById('searchRefFilter').focus(); }, 200);
+  });
+  document.getElementById('searchRefFilter').addEventListener('input', function(){
+    searchRefFilterText = this.value;
+    renderSearchRefList();
+  });
+  document.getElementById('searchRefList').addEventListener('click', function(e){
+    var row = e.target.closest('.catalog-row'); if(!row) return;
+    var code = row.getAttribute('data-code');
+    $searchRefModal.classList.remove('show');
+    handleScannedCode(code);
+  });
+  document.getElementById('btnCloseSearchRef').addEventListener('click', function(){ $searchRefModal.classList.remove('show'); });
+  document.getElementById('btnCloseSearchRefX').addEventListener('click', function(){ $searchRefModal.classList.remove('show'); });
 
   /* ================= Groups interactions (delegation) ================= */
   document.getElementById('groupsWrap').addEventListener('click', function(e){
