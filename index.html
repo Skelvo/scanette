@@ -584,7 +584,7 @@
         <p><b>Rotation des références</b> (menu •••) : classe les références par quantité totale sortie en Préparation, pour repérer ce qui part vite (ou pas du tout).</p>
         <p><b>Inventaire annuel</b> (onglet en haut) : scanne d'abord le code-barres d'un rayon — impossible de compter quoi que ce soit avant. Une fois ouvert, il liste tout ce qui doit s'y trouver (via Emplacements) et "Terminer le rayon" reste bloqué tant qu'il en manque. "Voir le rapport global" additionne les rayons terminés et affiche les écarts avec le stock système, exportables ou corrigeables en un clic (code de correction requis).</p>
         <p><b>Prénom</b> : sert à savoir qui a compté quoi (affiché sur les lignes et dans les exports), et à voir qui d'autre a l'app ouverte en même temps. <button id="btnChangeUserName" style="display:inline; background:none; border:none; padding:0; margin:0; font-size:12.5px; font-family:inherit; color:var(--accent); font-weight:700;">Ton prénom : <span id="userNameDisplay">(non défini)</span> — toucher pour changer</button></p>
-        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v74 — 22/09</b></p>
+        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v75 — 22/09</b></p>
       </div>
     </div>
   </div>
@@ -2940,6 +2940,11 @@
     var row = e.target.closest('.catalog-row'); if(!row) return;
     var code = row.getAttribute('data-code');
     $searchRefModal.classList.remove('show');
+    // Le tap sur la ligne est un vrai geste utilisateur (comme "Démarrer le
+    // scan") : on (re)débloque l'audio ici au cas où le scanner caméra n'a
+    // jamais été lancé cette session, sinon le bip resterait muet.
+    unlockAudio();
+    beep();
     handleScannedCode(code);
   });
   document.getElementById('btnCloseSearchRef').addEventListener('click', function(){ $searchRefModal.classList.remove('show'); });
