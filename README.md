@@ -188,3 +188,22 @@ create table public.registered_names (
 
 Sans cette table, le contrôle d'unicité est simplement ignoré (jamais
 bloquant) — chaque appareil garde son prénom tel quel, comme avant.
+
+### Notes de rayon
+
+Pour les cas où un rayon contient un lot de pièces sans référence précise à
+associer une par une (ex. un surstock d'une marque), une note libre par
+rayon, cherchée comme une référence dans "Emplacements" :
+
+```sql
+create table public.shelf_notes (
+  shelf_code text primary key,
+  note text not null,
+  updated_at timestamptz not null default now()
+);
+
+alter publication supabase_realtime add table public.shelf_notes;
+```
+
+Sans cette table, ces notes restent locales à l'appareil (pas de partage
+d'équipe).
