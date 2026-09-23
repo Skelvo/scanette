@@ -276,6 +276,10 @@
   .loc-badge:active{ opacity:.8; }
   .loc-none{ font-size:11px; color:var(--text-faint); }
 
+  .shelf-note-row{ display:flex; align-items:center; gap:8px; padding:10px 2px; border-bottom:1px solid var(--line); }
+  .shelf-note-text{ flex:1; min-width:0; font-size:13px; color:var(--text-dim); }
+  .shelf-note-shelf{ font-family:var(--font-mono); font-weight:800; color:var(--accent); }
+
   .shelf-item-row{ font-family:var(--font-mono); font-weight:700; font-size:15px; padding:11px 8px; border-bottom:1px solid var(--line); border-radius:6px; }
   /* Couleur de surligneur fixe (pas liée aux tokens de thème) : comme un
      vrai stabilo, elle doit rester la même en clair et en sombre. */
@@ -602,7 +606,7 @@
         <p><b>Rotation des références</b> (menu •••) : classe les références par quantité totale sortie en Préparation, pour repérer ce qui part vite (ou pas du tout).</p>
         <p><b>Inventaire annuel</b> (onglet en haut) : scanne d'abord le code-barres d'un rayon — impossible de compter quoi que ce soit avant. Une fois ouvert, il liste tout ce qui doit s'y trouver (via Emplacements) et "Terminer le rayon" reste bloqué tant qu'il en manque. "Voir le rapport global" additionne les rayons terminés et affiche les écarts avec le stock système, exportables ou corrigeables en un clic (code de correction requis).</p>
         <p><b>Prénom</b> : sert à savoir qui a compté quoi (affiché sur les lignes et dans les exports), et à voir qui d'autre a l'app ouverte en même temps. <button id="btnChangeUserName" style="display:inline; background:none; border:none; padding:0; margin:0; font-size:12.5px; font-family:inherit; color:var(--accent); font-weight:700;">Ton prénom : <span id="userNameDisplay">(non défini)</span> — toucher pour changer</button></p>
-        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v82 — 22/09</b></p>
+        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v83 — 23/09</b></p>
       </div>
     </div>
   </div>
@@ -631,7 +635,9 @@
       <button class="btn-secondary" id="btnBackToLocationsSearch" style="margin-bottom:12px;">← Retour à la recherche</button>
       <div class="panel">
         <h2 id="shelfDetailTitle" style="margin:0 0 4px; font-size:16px;">Rayon</h2>
-        <p class="sub" id="shelfDetailSub" style="margin:0;"></p>
+        <p class="sub" id="shelfDetailSub" style="margin:0 0 10px;"></p>
+        <div id="shelfDetailNote" style="display:none; font-size:13px; color:var(--text-dim); margin-bottom:8px;"></div>
+        <button class="btn-secondary" id="btnEditShelfNote" style="margin-top:0;">✎ Note du rayon (ex. "surstock...")</button>
       </div>
       <div id="shelfDetailList"></div>
     </div>
@@ -1115,6 +1121,7 @@
   var STORE_KEY = 'scanette_data_v1';
   var CATALOG_KEY = 'scanette_catalog_v1';
   var LOCATIONS_KEY = 'scanette_locations_v1';
+  var SHELF_NOTES_KEY = 'scanette_shelf_notes_v1';
   var STOCK_KEY = 'scanette_stock_v1';
   var ANOMALIES_KEY = 'scanette_anomalies_v1';
   var MOVEMENTS_KEY = 'scanette_movements_v1';
@@ -1133,6 +1140,7 @@
   var state = loadState();
   var catalog = loadCatalog(); // { code: refName } — local cache; source of truth is the shared db when connected
   var locations = loadLocations(); // { ref: [emplacement, ...] } — répertoire à part, indépendant de l'inventaire courant
+  var shelfNotes = loadShelfNotes(); // { shelfCode: "note libre" } — ex. "surstock disque Bosch et Delphi TC", cherché comme une référence
   // Stock partagé permanent, indépendant de la feuille de réception : la
   // réception l'alimente en plus (jamais vidé par "Vider"), la préparation
   // de commande le décrémente. { ref: quantité }
@@ -1294,6 +1302,30 @@
   }
   function saveLocations(){
     try{ localStorage.setItem(LOCATIONS_KEY, JSON.stringify(locations)); }catch(e){}
+  }
+  function loadShelfNotes(){
+    try{
+      var raw = localStorage.getItem(SHELF_NOTES_KEY);
+      if(raw) return JSON.parse(raw);
+    }catch(e){}
+    return {};
+  }
+  function saveShelfNotes(){
+    try{ localStorage.setItem(SHELF_NOTES_KEY, JSON.stringify(shelfNotes)); }catch(e){}
+  }
+  function setShelfNote(shelfCode, rawNote){
+    shelfCode = String(shelfCode || '').trim().toLowerCase();
+    if(!shelfCode) return;
+    var note = String(rawNote == null ? '' : rawNote).trim();
+    if(!note){
+      delete shelfNotes[shelfCode];
+      saveShelfNotes();
+      deleteShelfNoteEntry(shelfCode);
+    } else {
+      shelfNotes[shelfCode] = note;
+      saveShelfNotes();
+      writeShelfNoteEntry(shelfCode, note);
+    }
   }
   // Emplacements en minuscules (a1b) : convention déjà utilisée à l'atelier,
   // volontairement différente de la casse des références (forcées en
@@ -1475,6 +1507,7 @@
         migrateLocalCatalogToDb(existingCodes);
       }
       initSharedLocations();
+      initSharedShelfNotes();
       initSharedStock();
       initSharedAnomalies();
       initSharedStockMovements();
@@ -1610,6 +1643,67 @@
   function deleteLocationEntry(ref){
     if(!db || !ref) return;
     db.from('locations').delete().eq('ref', String(ref))
+      .then(function(res){ if(res.error) console.error(res.error); });
+  }
+
+  /* ================= Notes de rayon partagées (Supabase) ================= */
+  // Table à part de "locations" : une note libre par rayon (ex. "surstock
+  // disque Bosch et Delphi TC"), cherchée comme une référence dans
+  // Emplacements — pour les cas où un rayon contient un lot de pièces sans
+  // référence précise à associer une par une.
+  var shelfNotesMigrated = false;
+  function migrateLocalShelfNotesToDb(existingShelves){
+    Object.keys(shelfNotes).forEach(function(shelfCode){
+      if(!existingShelves[shelfCode]) writeShelfNoteEntry(shelfCode, shelfNotes[shelfCode]);
+    });
+  }
+  async function initSharedShelfNotes(){
+    if(!db) return;
+    try{
+      var page = await db.from('shelf_notes').select('shelf_code, note').order('shelf_code', { ascending: true });
+      if(page.error) throw page.error;
+      var rows = page.data || [];
+      var existingShelves = {};
+      var changed = false;
+      rows.forEach(function(row){
+        existingShelves[row.shelf_code] = true;
+        if(shelfNotes[row.shelf_code] !== row.note){
+          shelfNotes[row.shelf_code] = row.note;
+          changed = true;
+        }
+      });
+      if(changed) saveShelfNotes();
+      if(!shelfNotesMigrated){
+        shelfNotesMigrated = true;
+        migrateLocalShelfNotesToDb(existingShelves);
+      }
+    }catch(e){
+      console.error(e);
+      return;
+    }
+
+    db.channel('shelf-notes-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'shelf_notes' }, function(payload){
+        var row = payload.eventType === 'DELETE' ? payload.old : payload.new;
+        if(!row || !row.shelf_code) return;
+        if(payload.eventType === 'DELETE'){
+          delete shelfNotes[row.shelf_code];
+        } else {
+          shelfNotes[row.shelf_code] = row.note;
+        }
+        saveShelfNotes();
+        if(isLocationsViewOpen()) renderLocationsPage();
+      })
+      .subscribe();
+  }
+  function writeShelfNoteEntry(shelfCode, note){
+    if(!db || !shelfCode) return;
+    db.from('shelf_notes').upsert({ shelf_code: String(shelfCode), note: note, updated_at: new Date().toISOString() })
+      .then(function(res){ if(res.error) console.error(res.error); });
+  }
+  function deleteShelfNoteEntry(shelfCode){
+    if(!db || !shelfCode) return;
+    db.from('shelf_notes').delete().eq('shelf_code', String(shelfCode))
       .then(function(res){ if(res.error) console.error(res.error); });
   }
 
@@ -3931,15 +4025,31 @@
       });
     }
     refs.sort(naturalCompare);
-    if(refs.length === 0){
+    // Notes de rayon (ex. "surstock osram") : cherchées par leur texte ou le
+    // code du rayon, pas seulement les références précises ci-dessous.
+    var matchingNotes = q ? Object.keys(shelfNotes).filter(function(code){
+      return code.toLowerCase().indexOf(q) !== -1 || shelfNotes[code].toLowerCase().indexOf(q) !== -1;
+    }).sort() : [];
+    if(refs.length === 0 && matchingNotes.length === 0){
       wrap.innerHTML = '<div class="panel empty-state"><p>' + (q
         ? 'Aucune référence ne correspond à "' + escapeHtml(locationsFilterText) + '".'
         : 'Aucune référence connue pour l\'instant — scanne ou ajoute une référence pour commencer.') + '</p></div>';
       return;
     }
+    var html = '';
+    if(matchingNotes.length){
+      html += '<div class="panel">';
+      matchingNotes.forEach(function(code){
+        html += '<div class="shelf-note-row">';
+        html += '<div class="shelf-note-text"><span class="shelf-note-shelf">' + escapeHtml(code) + '</span> — ' + escapeHtml(shelfNotes[code]) + '</div>';
+        html += '<button class="row-icon-btn" data-role="viewShelfFromNote" data-shelf="' + escapeHtml(code) + '" title="Voir le rayon">→</button>';
+        html += '</div>';
+      });
+      html += '</div>';
+    }
     var truncated = refs.length > LOCATIONS_PAGE_MAX_ROWS;
     var shown = truncated ? refs.slice(0, LOCATIONS_PAGE_MAX_ROWS) : refs;
-    var html = '<div class="panel">';
+    if(shown.length) html += '<div class="panel">';
     shown.forEach(function(ref){
       var locs = locations[ref] || [];
       html += '<div class="catalog-row" data-ref="' + escapeHtml(ref) + '">';
@@ -3952,7 +4062,7 @@
       if(locs.length) html += '<button class="row-icon-btn" data-role="deleteLocation" title="Supprimer">✕</button>';
       html += '</div>';
     });
-    html += '</div>';
+    if(shown.length) html += '</div>';
     if(truncated) html += '<div class="panel empty-state"><p>+ ' + (refs.length - LOCATIONS_PAGE_MAX_ROWS) + ' autre(s) résultat — affine ta recherche pour les voir.</p></div>';
     wrap.innerHTML = html;
   }
@@ -3963,11 +4073,17 @@
   // Détail d'un rayon : toutes les références qui y sont rangées, avec celle
   // qu'on vient de chercher mise en évidence (comme un surligneur) pour la
   // repérer d'un coup d'œil une fois devant le vrai rayon.
+  var activeShelfDetailCode = null;
   function showShelfDetail(shelfCode, originRef){
+    activeShelfDetailCode = shelfCode;
     var refs = Object.keys(locations).filter(function(r){ return (locations[r] || []).indexOf(shelfCode) !== -1; });
     refs.sort(naturalCompare);
     document.getElementById('shelfDetailTitle').textContent = 'Rayon ' + shelfCode;
     document.getElementById('shelfDetailSub').textContent = refs.length + ' référence(s) à cet emplacement.';
+    var noteEl = document.getElementById('shelfDetailNote');
+    var note = shelfNotes[String(shelfCode).toLowerCase()];
+    if(note){ noteEl.textContent = '📝 ' + note; noteEl.style.display = 'block'; }
+    else{ noteEl.style.display = 'none'; }
     var html = '<div class="panel">';
     refs.forEach(function(ref){
       var isOrigin = ref === originRef;
@@ -3988,6 +4104,17 @@
     document.getElementById('shelfDetailView').style.display = 'none';
     document.getElementById('locationsSearchView').style.display = 'block';
   });
+  document.getElementById('btnEditShelfNote').addEventListener('click', function(){
+    if(!activeShelfDetailCode) return;
+    var current = shelfNotes[String(activeShelfDetailCode).toLowerCase()] || '';
+    askInput('Note pour le rayon "' + activeShelfDetailCode + '" (ex. "surstock disque Bosch et Delphi TC")', current, 'text').then(function(val){
+      if(val === null) return;
+      setShelfNote(activeShelfDetailCode, val);
+      showShelfDetail(activeShelfDetailCode);
+      if(isLocationsViewOpen()) renderLocationsPage();
+      toast(val.trim() ? 'Note enregistrée' : 'Note supprimée');
+    });
+  });
   document.getElementById('locationsPageList').addEventListener('click', function(e){
     var role = e.target.closest('[data-role]');
     role = role ? role.getAttribute('data-role') : null;
@@ -3995,6 +4122,11 @@
       var shelfBtn = e.target.closest('[data-shelf]');
       var originRow = e.target.closest('.catalog-row');
       showShelfDetail(shelfBtn.getAttribute('data-shelf'), originRow ? originRow.getAttribute('data-ref') : null);
+      return;
+    }
+    if(role === 'viewShelfFromNote'){
+      var noteShelfBtn = e.target.closest('[data-shelf]');
+      showShelfDetail(noteShelfBtn.getAttribute('data-shelf'), null);
       return;
     }
     var row = e.target.closest('.catalog-row'); if(!row) return;
