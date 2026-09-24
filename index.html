@@ -606,7 +606,7 @@
         <p><b>Rotation des références</b> (menu •••) : classe les références par quantité totale sortie en Préparation, pour repérer ce qui part vite (ou pas du tout).</p>
         <p><b>Inventaire annuel</b> (onglet en haut) : scanne d'abord le code-barres d'un rayon — impossible de compter quoi que ce soit avant. Une fois ouvert, il liste tout ce qui doit s'y trouver (via Emplacements) et "Terminer le rayon" reste bloqué tant qu'il en manque. "Voir le rapport global" additionne les rayons terminés et affiche les écarts avec le stock système, exportables ou corrigeables en un clic (code de correction requis).</p>
         <p><b>Prénom</b> : sert à savoir qui a compté quoi (affiché sur les lignes et dans les exports), et à voir qui d'autre a l'app ouverte en même temps. <button id="btnChangeUserName" style="display:inline; background:none; border:none; padding:0; margin:0; font-size:12.5px; font-family:inherit; color:var(--accent); font-weight:700;">Ton prénom : <span id="userNameDisplay">(non défini)</span> — toucher pour changer</button></p>
-        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v83 — 23/09</b></p>
+        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v84 — 24/09</b></p>
       </div>
     </div>
   </div>
@@ -1025,6 +1025,8 @@
   .blp-row-top { display:flex; align-items:center; justify-content:space-between; gap:10px; }
   .blp-ref { font-weight:700; font-size:13px; }
   .blp-desig { font-size:12px; color:var(--text-dim); margin-top:2px; }
+  .blp-loc { font-family:var(--font-mono); font-weight:700; font-size:12px; color:var(--accent); margin-top:3px; }
+  .blp-loc-none { font-family:var(--font-display); font-weight:400; color:var(--text-faint); }
   .blp-qty { font-family:var(--font-mono); font-weight:800; font-size:22px; flex-shrink:0; }
   .blp-qty .req { color:var(--text-dim); font-size:13px; }
   .blp-row-actions { display:flex; gap:8px; margin-top:8px; }
@@ -5207,6 +5209,7 @@
   window.__blAskInput = askInput;
   window.__blAdjustStock = adjustStock;
   window.__blCatalogRef = function(code){ return catalog[code] || null; };
+  window.__blLocationsForRef = function(ref){ return locations[ref] || []; };
   window.__blToast = toast;
   window.__blCurrentUser = function(){ return currentUser || null; };
   window.__blUid = uid;
@@ -5845,7 +5848,9 @@
       var over = it.qtyDone > it.qtyRequired;
       html += '<div class="blp-row ' + (ok ? 'ok' : (over ? 'over' : '')) + '">';
       html += '<div class="blp-row-top">';
-      html += '<div><div class="blp-ref">' + blEscapeHtml(it.ref) + '</div><div class="blp-desig">' + blEscapeHtml(it.designation) + '</div></div>';
+      var itLocs = window.__blLocationsForRef ? window.__blLocationsForRef(it.ref) : [];
+      html += '<div><div class="blp-ref">' + blEscapeHtml(it.ref) + '</div><div class="blp-desig">' + blEscapeHtml(it.designation) + '</div>';
+      html += '<div class="blp-loc">' + (itLocs.length ? '📍 ' + itLocs.map(blEscapeHtml).join(' · ') : '<span class="blp-loc-none">sans emplacement</span>') + '</div></div>';
       html += '<div class="blp-qty">' + it.qtyDone + ' <span class="req">/ ' + it.qtyRequired + '</span></div>';
       html += '</div>';
       if (!readOnly) {
