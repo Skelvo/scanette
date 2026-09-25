@@ -148,6 +148,8 @@
   .stat-row{ display:flex; align-items:baseline; gap:16px; margin-top:8px; flex-wrap:wrap; row-gap:4px; }
   .stat-row .n{ font-family:var(--font-mono); font-weight:700; font-size:15px; color:var(--accent); }
   .stat-row .lbl{ font-size:12px; color:var(--text-dim); }
+  .stat-btn{ display:flex; align-items:baseline; gap:5px; background:none; border:none; padding:0; }
+  .stat-btn .lbl{ text-decoration:underline; text-decoration-style:dotted; text-decoration-color:var(--text-faint); }
 
   /* ---------- Main scroll area ---------- */
   main{ flex:1; padding:14px 16px 130px; }
@@ -527,6 +529,7 @@
     <div class="stat-row">
       <div><span class="n" id="refCount">0</span> <span class="lbl">référence(s)</span></div>
       <div><span class="n" id="totalQty">0</span> <span class="lbl">pièces scannées</span></div>
+      <button class="stat-btn" id="pointedStat" title="Voir seulement les références pas encore pointées"><span class="n" id="pointedCount">0/0</span> <span class="lbl">pointées</span></button>
       <div id="valueStat" style="display:none;"><span class="n" id="totalValueEl">0 €</span> <span class="lbl">valeur stock</span></div>
     </div>
     <div id="presenceRow" style="display:none; font-size:11.5px; color:var(--success); margin-top:5px;"></div>
@@ -608,7 +611,7 @@
         <p><b>Rotation des références</b> (menu •••) : classe les références par quantité totale sortie en Préparation, pour repérer ce qui part vite (ou pas du tout).</p>
         <p><b>Inventaire annuel</b> (onglet en haut) : scanne d'abord le code-barres d'un rayon — impossible de compter quoi que ce soit avant. Une fois ouvert, il liste tout ce qui doit s'y trouver (via Emplacements) et "Terminer le rayon" reste bloqué tant qu'il en manque. "Voir le rapport global" additionne les rayons terminés et affiche les écarts avec le stock système, exportables ou corrigeables en un clic (code de correction requis).</p>
         <p><b>Prénom</b> : sert à savoir qui a compté quoi (affiché sur les lignes et dans les exports), et à voir qui d'autre a l'app ouverte en même temps. <button id="btnChangeUserName" style="display:inline; background:none; border:none; padding:0; margin:0; font-size:12.5px; font-family:inherit; color:var(--accent); font-weight:700;">Ton prénom : <span id="userNameDisplay">(non défini)</span> — toucher pour changer</button></p>
-        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v86 — 25/09</b></p>
+        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v87 — 25/09</b></p>
       </div>
     </div>
   </div>
@@ -2225,6 +2228,11 @@
     state.suppliers.forEach(function(s){ t += s.items.length; });
     return t;
   }
+  function totalPointed(){
+    var t = 0;
+    state.suppliers.forEach(function(s){ s.items.forEach(function(it){ t += Math.min(it.pointed || 0, it.qty); }); });
+    return t;
+  }
   function formatPrice(n){ return n.toFixed(2).replace('.', ',') + ' €'; }
   function totalValue(){
     var t = 0, any = false;
@@ -2234,6 +2242,7 @@
   function renderHeader(){
     document.getElementById('refCount').textContent = totalRefs();
     document.getElementById('totalQty').textContent = totalQty();
+    document.getElementById('pointedCount').textContent = totalPointed() + '/' + totalQty();
     var tv = totalValue();
     var valueStat = document.getElementById('valueStat');
     if(tv != null){
@@ -3398,11 +3407,22 @@
     toast(SORT_MODE_LABEL[sortMode] || sortMode);
   });
 
-  document.getElementById('btnPointFilter').addEventListener('click', function(){
-    pointFilterActive = !pointFilterActive;
-    this.classList.toggle('active', pointFilterActive);
+  function setPointFilter(active){
+    pointFilterActive = active;
+    document.getElementById('btnPointFilter').classList.toggle('active', pointFilterActive);
     renderGroups();
+  }
+  document.getElementById('btnPointFilter').addEventListener('click', function(){
+    setPointFilter(!pointFilterActive);
     toast(pointFilterActive ? 'Filtre : pas encore pointées' : 'Filtre pointage désactivé');
+  });
+  // Raccourci depuis le compteur "X/Y pointées" du bandeau : toujours vers
+  // le filtre (jamais un toggle) — cliquer là veut dire "montre-moi ce qu'il
+  // reste à pointer", pas "active/désactive".
+  document.getElementById('pointedStat').addEventListener('click', function(){
+    setPointFilter(true);
+    toast('Filtre : pas encore pointées');
+    document.getElementById('groupsWrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
 
   /* ================= Selection bar ================= */
