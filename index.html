@@ -606,7 +606,7 @@
         <p><b>Rotation des références</b> (menu •••) : classe les références par quantité totale sortie en Préparation, pour repérer ce qui part vite (ou pas du tout).</p>
         <p><b>Inventaire annuel</b> (onglet en haut) : scanne d'abord le code-barres d'un rayon — impossible de compter quoi que ce soit avant. Une fois ouvert, il liste tout ce qui doit s'y trouver (via Emplacements) et "Terminer le rayon" reste bloqué tant qu'il en manque. "Voir le rapport global" additionne les rayons terminés et affiche les écarts avec le stock système, exportables ou corrigeables en un clic (code de correction requis).</p>
         <p><b>Prénom</b> : sert à savoir qui a compté quoi (affiché sur les lignes et dans les exports), et à voir qui d'autre a l'app ouverte en même temps. <button id="btnChangeUserName" style="display:inline; background:none; border:none; padding:0; margin:0; font-size:12.5px; font-family:inherit; color:var(--accent); font-weight:700;">Ton prénom : <span id="userNameDisplay">(non défini)</span> — toucher pour changer</button></p>
-        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v84 — 24/09</b></p>
+        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v85 — 25/09</b></p>
       </div>
     </div>
   </div>
@@ -1136,6 +1136,7 @@
   var PIN_KEY = 'scanette_pin_v1';
   var THEME_KEY = 'scanette_theme_v1';
   var SORT_KEY = 'scanette_sort_v1';
+  var ZOOM_KEY = 'scanette_zoom_v1';
   var HISTORY_KEY = 'scanette_history_v1';
   var USERNAME_KEY = 'scanette_username_v1';
 
@@ -2604,6 +2605,22 @@
   var codeReader = null; // lazy ZXing.BrowserMultiFormatReader
   var detectBusy = false;
   var torchOn = false;
+  // Niveau de zoom choisi par l'utilisateur, conservé jusqu'à ce qu'il le
+  // change lui-même : sans ça, chaque ré-acquisition de la caméra (pause de
+  // veille en plaçant le tel face contre table, popup "déjà compté ailleurs",
+  // etc. — très fréquent entre deux produits) revenait au zoom par défaut,
+  // obligeant à rezoomer sans arrêt.
+  function loadZoomLevel(){
+    try{
+      var v = parseFloat(localStorage.getItem(ZOOM_KEY));
+      if(!isNaN(v) && v >= 1 && v <= 3) return v;
+    }catch(e){}
+    return 1;
+  }
+  function saveZoomLevel(v){
+    try{ localStorage.setItem(ZOOM_KEY, String(v)); }catch(e){}
+  }
+  var savedZoomLevel = loadZoomLevel();
   // Vrai pendant que la modale "référence inconnue" est ouverte par-dessus la
   // caméra, pour ne pas la rouvrir en boucle sur le même code déjà en attente.
   var scanningPaused = false;
@@ -2894,10 +2911,16 @@
 
     var range = document.getElementById('zoomRange');
     var hwZoom = caps.zoom && caps.zoom.max > caps.zoom.min ? caps.zoom : null;
-    range.value = 1;
-    document.getElementById('scanVideo').style.setProperty('--zoom', 1);
+    range.value = savedZoomLevel;
+    document.getElementById('scanVideo').style.setProperty('--zoom', savedZoomLevel);
+    if(hwZoom && track){
+      var initialHw = hwZoom.min + (savedZoomLevel - 1) / 2 * (hwZoom.max - hwZoom.min);
+      track.applyConstraints({ advanced: [{ zoom: initialHw }] }).catch(function(){});
+    }
     range.oninput = function(){
       var v = parseFloat(range.value);
+      savedZoomLevel = v;
+      saveZoomLevel(v);
       document.getElementById('scanVideo').style.setProperty('--zoom', v);
       if(hwZoom && track){
         var hw = hwZoom.min + (v - 1) / 2 * (hwZoom.max - hwZoom.min);
@@ -2940,12 +2963,12 @@
     if(scanState.stream){ scanState.stream.getTracks().forEach(function(t){ t.stop(); }); scanState.stream = null; }
     if(codeReader){ try{ codeReader.reset(); }catch(e){} }
     var video = document.getElementById('scanVideo');
-    if(video){ video.srcObject = null; video.style.setProperty('--zoom', 1); }
+    if(video){ video.srcObject = null; video.style.setProperty('--zoom', savedZoomLevel); }
     var btnTorch = document.getElementById('btnTorch');
     btnTorch.style.display = 'none';
     btnTorch.classList.remove('active');
     torchOn = false;
-    document.getElementById('zoomRange').value = 1;
+    document.getElementById('zoomRange').value = savedZoomLevel;
     document.getElementById('quickQty').style.display = 'none';
     clearTimeout(quickQtyTimer);
     quickQtyTarget = null;
