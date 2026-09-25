@@ -255,11 +255,13 @@
   .qty-stepper .q{ font-family:var(--font-mono); font-weight:800; font-size:20px; min-width:34px; text-align:center; }
   .price-tag{ display:block; margin:3px 0; padding:2px 8px; border:1px dashed var(--line); border-radius:10px; font-size:10.5px; color:var(--accent); background:none; font-family:var(--font-mono); max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; box-sizing:border-box; }
   .price-tag.set{ border-style:solid; border-color:var(--line); color:var(--text-dim); }
-  .point-stepper{ display:inline-flex; align-items:center; align-self:flex-start; margin-left:31px; border:1px dashed var(--line); border-radius:10px; font-family:var(--font-mono); color:var(--accent); overflow:hidden; }
+  .point-row{ display:flex; align-items:center; gap:8px; align-self:flex-start; margin-left:31px; }
+  .point-stepper{ display:inline-flex; align-items:center; border:1px dashed var(--line); border-radius:10px; font-family:var(--font-mono); color:var(--accent); overflow:hidden; }
   .point-stepper.active{ border-style:solid; font-weight:700; }
   .point-stepper.done{ font-weight:800; }
   .point-stepper button{ background:rgba(0,0,0,.06); border:none; color:inherit; font-size:13px; font-weight:800; width:22px; height:22px; flex-shrink:0; display:flex; align-items:center; justify-content:center; padding:0; line-height:1; }
   .point-stepper .point-label{ padding:0 7px; font-size:10.5px; white-space:nowrap; }
+  .point-all-btn{ flex-shrink:0; padding:4px 9px; border:1px dashed var(--line); border-radius:10px; background:none; color:var(--accent); font-family:var(--font-mono); font-size:10.5px; font-weight:700; white-space:nowrap; }
   .row-icon-btn{ background:none; border:none; color:var(--text-faint); font-size:15px; padding:6px; flex-shrink:0; }
   .row-icon-btn:active{ color:var(--text); }
   .row-icon-btn.danger{ color:var(--danger); }
@@ -606,7 +608,7 @@
         <p><b>Rotation des références</b> (menu •••) : classe les références par quantité totale sortie en Préparation, pour repérer ce qui part vite (ou pas du tout).</p>
         <p><b>Inventaire annuel</b> (onglet en haut) : scanne d'abord le code-barres d'un rayon — impossible de compter quoi que ce soit avant. Une fois ouvert, il liste tout ce qui doit s'y trouver (via Emplacements) et "Terminer le rayon" reste bloqué tant qu'il en manque. "Voir le rapport global" additionne les rayons terminés et affiche les écarts avec le stock système, exportables ou corrigeables en un clic (code de correction requis).</p>
         <p><b>Prénom</b> : sert à savoir qui a compté quoi (affiché sur les lignes et dans les exports), et à voir qui d'autre a l'app ouverte en même temps. <button id="btnChangeUserName" style="display:inline; background:none; border:none; padding:0; margin:0; font-size:12.5px; font-family:inherit; color:var(--accent); font-weight:700;">Ton prénom : <span id="userNameDisplay">(non défini)</span> — toucher pour changer</button></p>
-        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v85 — 25/09</b></p>
+        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v86 — 25/09</b></p>
       </div>
     </div>
   </div>
@@ -2326,10 +2328,13 @@
         var pointDone = it.qty > 0 && pointed >= it.qty;
         var pointLabel = pointed > 0 ? ('📍 ' + pointed + '/' + it.qty + (pointDone ? ' ✓' : '')) : '📍 Pointer';
         var pointStyle = pointGradientStyle(pointed, it.qty);
+        html += '<div class="point-row">';
         html += '<div class="point-stepper'+(pointed>0?' active':'')+(pointDone?' done':'')+'" style="'+pointStyle+'" title="Compteur de pointage manuel (contre un BL papier) — ne touche pas au stock">';
         html += '<button data-role="pointDown">−</button>';
         html += '<span class="point-label" data-role="pointVal">'+escapeHtml(pointLabel)+'</span>';
         html += '<button data-role="pointUp">+</button>';
+        html += '</div>';
+        if(!pointDone && it.qty > 0) html += '<button class="point-all-btn" data-role="pointAll" title="Marquer tout comme pointé d\'un coup">✓ Tout</button>';
         html += '</div>';
         html += '</div>';
       });
@@ -3291,6 +3296,11 @@
     }
     if(role === 'pointDown'){
       item.pointed = Math.max(0, (item.pointed || 0) - 1);
+      saveState(); renderGroups();
+      return;
+    }
+    if(role === 'pointAll'){
+      item.pointed = item.qty;
       saveState(); renderGroups();
       return;
     }
