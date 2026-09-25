@@ -611,7 +611,7 @@
         <p><b>Rotation des références</b> (menu •••) : classe les références par quantité totale sortie en Préparation, pour repérer ce qui part vite (ou pas du tout).</p>
         <p><b>Inventaire annuel</b> (onglet en haut) : scanne d'abord le code-barres d'un rayon — impossible de compter quoi que ce soit avant. Une fois ouvert, il liste tout ce qui doit s'y trouver (via Emplacements) et "Terminer le rayon" reste bloqué tant qu'il en manque. "Voir le rapport global" additionne les rayons terminés et affiche les écarts avec le stock système, exportables ou corrigeables en un clic (code de correction requis).</p>
         <p><b>Prénom</b> : sert à savoir qui a compté quoi (affiché sur les lignes et dans les exports), et à voir qui d'autre a l'app ouverte en même temps. <button id="btnChangeUserName" style="display:inline; background:none; border:none; padding:0; margin:0; font-size:12.5px; font-family:inherit; color:var(--accent); font-weight:700;">Ton prénom : <span id="userNameDisplay">(non défini)</span> — toucher pour changer</button></p>
-        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v87 — 25/09</b></p>
+        <p style="color:var(--text-faint); font-size:11px; margin-top:14px;">Version de l'app : <b id="appVersion">v88 — 25/09</b></p>
       </div>
     </div>
   </div>
@@ -3233,7 +3233,7 @@
       pointAllSupplier.items.forEach(function(it){
         if(it.qty > 0 && (it.pointed || 0) < it.qty){ it.pointed = it.qty; pointedCount++; }
       });
-      saveState(); renderGroups();
+      saveState(); renderGroups(); renderHeader();
       toast(pointedCount ? ('Tout pointé (' + pointedCount + ')') : 'Déjà tout pointé');
       return;
     }
@@ -3300,17 +3300,17 @@
     if(role === 'pointUp'){
       var pointedUp = item.pointed || 0;
       item.pointed = item.qty > 0 ? Math.min(item.qty, pointedUp + 1) : pointedUp + 1;
-      saveState(); renderGroups();
+      saveState(); renderGroups(); renderHeader();
       return;
     }
     if(role === 'pointDown'){
       item.pointed = Math.max(0, (item.pointed || 0) - 1);
-      saveState(); renderGroups();
+      saveState(); renderGroups(); renderHeader();
       return;
     }
     if(role === 'pointAll'){
       item.pointed = item.qty;
-      saveState(); renderGroups();
+      saveState(); renderGroups(); renderHeader();
       return;
     }
     if(role === 'pointVal'){
@@ -3319,7 +3319,7 @@
         nv = parseInt(nv, 10);
         if(isNaN(nv) || nv < 0){ toast('Valeur invalide'); return; }
         item.pointed = item.qty > 0 ? Math.min(item.qty, nv) : nv;
-        saveState(); renderGroups();
+        saveState(); renderGroups(); renderHeader();
       });
       return;
     }
